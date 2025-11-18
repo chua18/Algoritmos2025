@@ -13,9 +13,13 @@ app = FastAPI()
 # --- CREDENCIALES Y CONFIGURACIÓN ---
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID", "")
+VERSION = os.getenv("VERSION", "v22.0")
 
-GRAPH_SEND_URL = "https://graph.facebook.com/v22.0/828302067035331/messages"
+GRAPH_SEND_URL = f"https://graph.facebook.com/{VERSION}/{PHONE_NUMBER_ID}/messages"
 
+logging.info(f"ACCESS_TOKEN cargado? {bool(ACCESS_TOKEN)}")
+logging.info(f"PHONE_NUMBER_ID: {PHONE_NUMBER_ID!r}")
+logging.info(f"GRAPH_SEND_URL: {GRAPH_SEND_URL}")
 # --------------------------------------------------------
 # FUNCIONES AUXILIARES PARA ENVIAR MENSAJES A WHATSAPP
 # --------------------------------------------------------

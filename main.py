@@ -26,9 +26,11 @@ logging.info(f"GRAPH_SEND_URL: {GRAPH_SEND_URL}")
 # FUNCIONES AUXILIARES PARA ENVIAR MENSAJES A WHATSAPP
 # --------------------------------------------------------
 async def send_to_whatsapp(payload: Dict[str, Any]) -> None:
-    """Envía un mensaje a la API de WhatsApp usando httpx (async)."""
     if not ACCESS_TOKEN or not PHONE_NUMBER_ID:
-        logging.warning("Falta WHATSAPP_TOKEN o WHATSAPP_PHONE_ID. (No se envía a la API, modo MOCK)")
+        logging.warning(
+            f"Falta ACCESS_TOKEN o PHONE_NUMBER_ID. "
+            f"(ACCESS_TOKEN={bool(ACCESS_TOKEN)}, PHONE_NUMBER_ID={bool(PHONE_NUMBER_ID)})"
+        )
         logging.info(f"MOCK SEND => {payload}")
         return
 
@@ -37,16 +39,10 @@ async def send_to_whatsapp(payload: Dict[str, Any]) -> None:
         "Content-Type": "application/json"
     }
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            response = await client.post(GRAPH_SEND_URL, json=payload, headers=headers)
-            if response.status_code >= 300:
-                logging.error(f"Error al enviar a WhatsApp: {response.status_code} {response.text}")
-            else:
-                logging.info(f"Enviado a WhatsApp: {response.json()}")
-        except httpx.RequestError as e:
-            logging.error(f"Error de conexión al enviar a WhatsApp: {e}")
-
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.post(GRAPH_SEND_URL, headers=headers, json=payload)
+        logging.info(f"Respuesta WhatsApp: {resp.status_code} {resp.text}")
+        resp.raise_for_status()
 
 async def send_menu(to: str, nombre: str = "Cliente") -> None:
     """Envía el menú actual (paginado) al usuario."""

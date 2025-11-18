@@ -6,6 +6,8 @@ import httpx
 from typing import Any, Dict, List
 from Dominio.Chat import Chat
 
+logging.basicConfig(level=logging.INFO)
+
 chat = Chat()
 
 app = FastAPI()

@@ -5,6 +5,7 @@ import logging
 import httpx
 from typing import Any, Dict, List
 from Dominio.Chat import Chat
+from fastapi.responses import PlainTextResponse
 
 logging.basicConfig(level=logging.INFO)
 
@@ -15,6 +16,7 @@ app = FastAPI()
 # --- CREDENCIALES Y CONFIGURACIÓN ---
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")
 PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID", "")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "")
 VERSION = os.getenv("VERSION", "v22.0")
 
 GRAPH_SEND_URL = f"https://graph.facebook.com/{VERSION}/{PHONE_NUMBER_ID}/messages"
@@ -65,25 +67,24 @@ def index():
     return {"mensaje": "welcome developer"}
 
 
-ACCESS_TOKEN = "EAATMVR8dZCWcBP4DBhxLgO5zaSg6r3USZAikV8SCZA0y1Aeo3g0CISgFm1C9QXyWJaWAcBnqsw3Ca7aZA2bU5ASxH0YyLojyTDKYw8jEtDp7lHnwZC7tkYU3Dfa3v36qjDjlZA0kIX658tHBmzJ3Eqse44JvkcZCeht9aS2wpgdpEZBLQOKmUBHwcJDMnL1ZAZCU3Az7w0criorYcx7gMDaSTaefDDO8PqOLaxtCyxvZCeImpodbTtLEuo3ODnZCZA6NDyDOcsjGlZAqaGhNgThTEY9XaE"
-
+#ACCESS_TOKEN = "EAATMVR8dZCWcBP4DBhxLgO5zaSg6r3USZAikV8SCZA0y1Aeo3g0CISgFm1C9QXyWJaWAcBnqsw3Ca7aZA2bU5ASxH0YyLojyTDKYw8jEtDp7lHnwZC7tkYU3Dfa3v36qjDjlZA0kIX658tHBmzJ3Eqse44JvkcZCeht9aS2wpgdpEZBLQOKmUBHwcJDMnL1ZAZCU3Az7w0criorYcx7gMDaSTaefDDO8PqOLaxtCyxvZCeImpodbTtLEuo3ODnZCZA6NDyDOcsjGlZAqaGhNgThTEY9XaE"
 
 @app.get("/whatsapp")
-async def verify_token(request: Request):
-    try:
-        query_params = request.query_params
-        verify_token = query_params.get("hub.verify_token")
-        challenge = query_params.get("hub.challenge")
+async def verify_token_endpoint(request: Request):
+    params = request.query_params
+    token = params.get("hub.verify_token")
+    challenge = params.get("hub.challenge")
+    mode = params.get("hub.mode")
 
-        if verify_token is not None and challenge is not None and verify_token == ACCESS_TOKEN:
-            return int(challenge)
-        else:
-            raise HTTPException(status_code=400, detail="Token de verificación inválido o parámetros faltantes")
+    logging.info(f"[WEBHOOK VERIFY] mode={mode!r}, token_param={token!r}, env_token={VERIFY_TOKEN!r}, challenge={challenge!r}")
 
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error en la verificación: {e}")
+    # Meta suele mandar hub.mode=subscribe, pero para la prueba desde el navegador
+    # lo importante es que el token y el challenge estén
+    if token == VERIFY_TOKEN and challenge is not None:
+        # Devolver el challenge tal cual, como texto plano
+        return PlainTextResponse(challenge)
 
-
+    raise HTTPException(status_code=400, detail="Token de verificación inválido")
 @app.post("/whatsapp")
 async def received_message(request: Request):
     try:

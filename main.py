@@ -11,8 +11,8 @@ chat = Chat()
 app = FastAPI()
 
 # --- CREDENCIALES Y CONFIGURACIÓN ---
-ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")
-PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID", "")
+ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", EAA9eDvNAZBDQBP37gpXOtr2GEcSy83sotyZA5s1qRZBFqWZBmFOuTglbfCASLaD1vV1rdOgyJBHKAxRdk8JRlTxcs7ZBCGeQ0vxhne9nlV08EKkpbz34q3wgeV8Pb3vmcajZCdjB2U5lOy23JRwfrhGagM2MtQUeaalUGtQ3FFIP7inKeENVP8wC7vPc34QQZDZD)
+PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID", 868212535738088)
 GRAPH_SEND_URL = "https://graph.facebook.com/v22.0/828302067035331/messages"
 
 # --------------------------------------------------------

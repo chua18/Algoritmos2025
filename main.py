@@ -113,6 +113,7 @@ async def received_message(request: Request):
         changes = entry["changes"][0]
         value = changes["value"]
 
+        # A veces llegan solo "statuses" sin messages
         if "messages" not in value or len(value["messages"]) == 0:
             return "EVENT_RECEIVED"
 
@@ -125,49 +126,40 @@ async def received_message(request: Request):
 
         print(f"Mensaje recibido de {number}: {content} (tipo: {type_message})")
 
-        # ========= 1) MENSAJES INTERACTIVOS (listas/botones) =========
-        if type_message == "interactive":
-            # content acá es el id del row: next_page, categoria_X, etc.
-            es_accion_menu = (
+        # Normalizamos el texto para comparar comandos tipo /reset
+        texto_normalizado = ""
+        if isinstance(content, str):
+            texto_normalizado = content.strip().lower()
+
+        # 1) ¿Es una acción del MENÚ (botones/listas)?
+        es_accion_menu = (
+            isinstance(content, str)
+            and (
                 content in ["next_page", "prev_page", "ordenar", "filtrar_categoria", "go_first_page"]
                 or content.startswith("categoria_")
             )
+        )
 
-            if es_accion_menu:
-                nuevo_mensaje = chat.manejar_accion(content)
-                payload = {
-                    "messaging_product": "whatsapp",
-                    "to": number,
-                    "type": "interactive",
-                    "interactive": nuevo_mensaje,
-                }
-                await send_to_whatsapp(payload)
-                return "EVENT_RECEIVED"
+        if es_accion_menu:
+            # Acciones del menú (paginado, filtros, etc.)
+            nuevo_mensaje = chat.manejar_accion(content)
+            payload = {
+                "messaging_product": "whatsapp",
+                "to": number,
+                "type": "interactive",
+                "interactive": nuevo_mensaje,
+            }
+            await send_to_whatsapp(payload)
+            return "EVENT_RECEIVED"
 
-            # si quisieras, podrías tener otros interactivos no de menú acá
+        # 2) ¿Es un comando para RESETEAR el menú?
+        if texto_normalizado in ("/reset", "/inicio", "menu"):
+            chat.reset_estado_menu()
             await send_menu(number, name)
             return "EVENT_RECEIVED"
 
-        # ========= 2) MENSAJES DE TEXTO =========
-        if type_message == "text":
-            texto = content.strip().lower()
-
-            # Comandos especiales: acá SÍ reseteamos
-            if texto in ("/reset", "/inicio", "menu"):
-                chat.reset_estado()
-                await send_menu(number, name)
-                return "EVENT_RECEIVED"
-
-            # Más adelante acá vas a meter lógica de carrito:
-            # - si texto es un número → cantidad
-            # - si texto es "confirmar" → confirmar pedido
-            # etc.
-            #
-            # Por ahora, si no hay nada de eso, podés volver a mostrar el menú
-            await send_menu(number, name)
-            return "EVENT_RECEIVED"
-
-        # Si por alguna razón viene otro tipo
+        # 3) Cualquier otro texto (por ahora) → mostrar menú
+        #    Más adelante acá vas a meter la lógica de carrito
         await send_menu(number, name)
         return "EVENT_RECEIVED"
 

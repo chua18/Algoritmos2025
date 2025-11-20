@@ -31,6 +31,7 @@ logging.info(f"ACCESS_TOKEN cargado? {bool(ACCESS_TOKEN)}")
 logging.info(f"PHONE_NUMBER_ID: {PHONE_NUMBER_ID!r}")
 logging.info(f"GRAPH_SEND_URL: {GRAPH_SEND_URL}")
 
+estado_usuarios: Dict[str, Dict[str, Any]] = {}
 
 # --------------------------------------------------------
 # FUNCIONES AUXILIARES PARA ENVIAR MENSAJES A WHATSAPP
@@ -141,24 +142,83 @@ async def received_message(request: Request):
         if isinstance(content, str):
             texto_normalizado = content.strip().lower()
 
+        estado = estado_usuarios.get(number)
+         # Fase 1: esperando cantidad
+        if estado and estado.get("fase") == "esperando_cantidad" and type_message == "text":
+            try:
+                cantidad = int(texto_normalizado)
+                if cantidad <= 0:
+                    raise ValueError()
+            except ValueError:
+                await send_text(
+                    number,
+                    "❌ No entendí la cantidad. Escribí un número mayor a 0, por ejemplo *2*."
+                )
+                return "EVENT_RECEIVED"
+
+            # Guardamos la cantidad y pasamos a fase detalle
+            estado["cantidad"] = cantidad
+            estado["fase"] = "esperando_detalle"
+            await send_text(
+                number,
+                "📝 ¿Querés quitar algún ingrediente?\n"
+                "Escribí por ejemplo: *sin cebolla y sin tomate*.\n"
+                "Si va normal, respondé *no*."
+            )
+            return "EVENT_RECEIVED"
+
+        # Fase 2: esperando detalle
+        if estado and estado.get("fase") == "esperando_detalle" and type_message == "text":
+            detalle = content.strip()
+            if detalle.lower() == "no":
+                detalle = ""
+
+            row_id = estado["row_id"]
+            cantidad = estado.get("cantidad", 1)
+
+            # Ahora sí, agregamos al carrito
+            item, total = chat.agregar_producto_al_carrito(
+                telefono=number,
+                row_id=row_id,
+                cantidad=cantidad,
+                detalle=detalle,
+            )
+
+            # Limpiamos el estado temporal
+            del estado_usuarios[number]
+
+            texto_detalle = f" (📝 {item.detalle})" if item.detalle else ""
+            mensaje = (
+                f"✅ *{item.nombre}* x{item.cantidad}{texto_detalle} agregado al carrito.\n"
+                f"💵 Total actual: ${total}\n\n"
+                "Escribí *carrito* para ver todo lo que llevás."
+            )
+            await send_text(number, mensaje)
+            # Opcional: volvemos a mostrar el menú
+            await send_menu(number, name)
+            return "EVENT_RECEIVED"
+
         # 1) ¿Seleccionó un PRODUCTO del menú? (row id: 'producto_X')
         es_producto = isinstance(content, str) and content.startswith("producto_")
 
         if es_producto:
-            try:
-                item, total = chat.agregar_producto_al_carrito(number, content)
-                mensaje = (
-                    f"✅ *{item.nombre}* agregado al carrito (${item.precio}).\n"
-                    f"💵 Total actual: ${total}\n\n"
-                    "Escribí *carrito* para ver todo lo que llevás."
-                )
-            except ValueError:
-                mensaje = "❌ No pude identificar ese producto. Probá de nuevo."
+            # Iniciamos flujo de cantidad
+            estado_usuarios[number] = {
+                "fase": "esperando_cantidad",
+                "row_id": content,
+            }
 
-            await send_text(number, mensaje)
-            # Opcional: volver a mostrar el menú actual (manteniendo filtro/página)
-            await send_menu(number, name)
+            # Podés recuperar el nombre del producto para hacer el mensaje más lindo
+            prod = chat._buscar_producto_por_row_id(content)
+            nombre = prod["nombre"] if prod else "el producto elegido"
+
+            await send_text(
+                number,
+                f"🍽 ¿Cuántas unidades de *{nombre}* querés?\n"
+                "Escribí un número, por ejemplo *1* o *2*."
+            )
             return "EVENT_RECEIVED"
+
 
         # 2) ¿Es una acción del MENÚ (paginado / filtros / categorías)?
         es_accion_menu = (

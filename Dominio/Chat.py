@@ -1,141 +1,157 @@
-from functools import wraps
-from typing import Any, Optional, Dict, Callable
-import inspect
-from datetime import datetime
+# Dominio/Chat.py
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+from Menu import menuCompleto  # <-- tu menú de productos
+
+PAGE_SIZE = 5
+
+
+@dataclass
+class Pedido:
+    cliente: str
+    items: List[Dict[str, Any]] = field(default_factory=list)
+
+
+def get_paginated_menu(page: int = 1, categoria: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Devuelve una “página” de productos desde menuCompleto.
+    Si se pasa categoría, filtra por ese campo.
+    """
+    productos = menuCompleto
+
+    if categoria:
+        productos = [
+            p for p in menuCompleto
+            if p.get("categoria", "").lower() == categoria.lower()
+        ]
+
+    inicio = (page - 1) * PAGE_SIZE
+    fin = inicio + PAGE_SIZE
+    return productos[inicio:fin]
 
 
 class Chat:
     def __init__(self) -> None:
-        # Comandos registrados: "/inicio", "/ayuda", etc.
-        # Cada comando guarda metadata de la función asociada.
-        self.function_graph: Dict[str, Dict[str, Any]] = {}
+        # Estado para el paginado / filtros
+        self.pagina_actual: int = 1
+        self.categoria_actual: Optional[str] = None
+        self.orden_por_precio: Optional[str] = None  # "asc", "desc" o None
 
-        # Teléfono actual del usuario que se está manejando
-        self.user_phone: str = ""
+        # Si más adelante querés, aquí podrías guardar pedidos por teléfono, etc.
+        self.pedidos: Dict[str, Pedido] = {}
 
-        # Función que debe manejar el próximo mensaje (flujo paso a paso)
-        self.waiting_for: Optional[Callable[[str], None]] = None
+    # ----------------- MENÚ PAGINADO ----------------- #
 
-        # Datos de la conversación (carrito, página actual, categoría, etc.)
-        self.conversation_data: Dict[str, Any] = {}
+    def _obtener_menu_actual(self) -> List[Dict[str, Any]]:
+        productos = get_paginated_menu(self.pagina_actual, self.categoria_actual)
 
-        # Función para enviar mensajes al usuario (la setea main.py)
-        # Debe ser: Callable[[str], None]
-        self.enviador: Optional[Callable[[str], None]] = None
+        if self.orden_por_precio == "asc":
+            productos = sorted(productos, key=lambda p: p["precio"])
+        elif self.orden_por_precio == "desc":
+            productos = sorted(productos, key=lambda p: p["precio"], reverse=True)
 
-    # ------------------------------------------------------------------
-    # Helpers de estado
-    # ------------------------------------------------------------------
+        return productos
 
-    def set_waiting_for(self, func: Optional[Callable[[str], None]]) -> None:
-        """Define qué función procesará el próximo mensaje del usuario."""
-        self.waiting_for = func
-
-    def clear_waiting_for(self) -> None:
-        """Limpia la función en espera."""
-        self.waiting_for = None
-
-    def set_conversation_data(self, key: str, value: Any) -> None:
-        """Guarda un dato en la conversación actual."""
-        self.conversation_data[key] = value
-
-    def get_conversation_data(self, key: str, default: Any = None) -> Any:
-        """Obtiene un dato de la conversación actual."""
-        return self.conversation_data.get(key, default)
-
-    def clear_conversation_data(self) -> None:
-        """Limpia todos los datos de la conversación."""
-        self.conversation_data.clear()
-
-    # ------------------------------------------------------------------
-    # Envío de mensajes
-    # ------------------------------------------------------------------
-
-    def enviar(self, texto: str) -> None:
+    def generar_mensaje_menu(self) -> Dict[str, Any]:
         """
-        Envía un mensaje al usuario.
-        Si no hay 'enviador' configurado, hace print (útil para debug local).
+        Construye el objeto 'interactive' para WhatsApp List
+        en base a la página y categoría actuales.
+        ES EXACTAMENTE lo que main.py espera que devuelva.
         """
-        if self.enviador is not None:
-            self.enviador(texto)
-        else:
-            print(texto)
+        productos = self._obtener_menu_actual()
 
-    # ------------------------------------------------------------------
-    # Registro de comandos
-    # ------------------------------------------------------------------
+        rows: List[Dict[str, Any]] = []
 
-    def register_function(self, command: str) -> Callable:
+        # Filas de productos
+        for producto in productos:
+            rows.append({
+                "id": f"producto_{producto['id']}",
+                "title": f"{producto['nombre']} - ${producto['precio']}",
+                "description": producto["descripcion"],
+            })
+
+        # Filas de navegación / acciones
+        if self.pagina_actual > 1:
+            rows.append({
+                "id": "prev_page",
+                "title": "⬅️ Página anterior",
+                "description": "Volver a la página anterior",
+            })
+
+        rows.append({
+            "id": "next_page",
+            "title": "➡️ Siguiente página",
+            "description": "Ver más productos",
+        })
+
+        # Opcionales (los nombres matchean con lo que usás en main.py)
+        rows.append({
+            "id": "ordenar",
+            "title": "↕️ Ordenar por precio",
+            "description": "Alternar entre más barato y más caro",
+        })
+        rows.append({
+            "id": "go_first_page",
+            "title": "⏮ Volver al inicio",
+            "description": "Ir a la primera página del menú",
+        })
+        # Si después querés filtrar por categoría, podés usar "filtrar_categoria"
+
+        mensaje_interactivo: Dict[str, Any] = {
+            "type": "list",
+            "header": {
+                "type": "text",
+                "text": "Menú de productos",
+            },
+            "body": {
+                "text": "🍔 *Menú disponible:*\nSeleccioná un producto o una acción.\n",
+            },
+            "footer": {
+                "text": f"📄 Página {self.pagina_actual}",
+            },
+            "action": {
+                "button": "Ver opciones",
+                "sections": [
+                    {
+                        "title": "Productos disponibles",
+                        "rows": rows,
+                    }
+                ],
+            },
+        }
+
+        return mensaje_interactivo
+
+    def manejar_accion(self, accion_id: str) -> Dict[str, Any]:
         """
-        Decorador para registrar comandos del bot.
-
-        Uso:
-        @bot.register_function("/inicio")
-        def cmd_inicio(mensaje: str):
-            ...
+        Maneja IDs como 'next_page', 'prev_page', 'ordenar', 'go_first_page', etc.
+        Devuelve de nuevo un 'interactive' para que main.py lo envíe.
         """
-        def decorator(func: Callable[[str], None]) -> Callable[[str], None]:
-            @wraps(func)
-            def wrapper(mensaje: str) -> None:
-                return func(mensaje)
+        if accion_id == "next_page":
+            self.pagina_actual += 1
 
-            # Guardamos metadata del comando
-            self.function_graph[command] = {
-                "function": wrapper,
-                "name": func.__name__,
-                "doc": func.__doc__,
-                "created_at": datetime.now(),
-                "params": inspect.signature(func),
-            }
-            return wrapper
+        elif accion_id == "prev_page":
+            if self.pagina_actual > 1:
+                self.pagina_actual -= 1
 
-        return decorator
+        elif accion_id == "go_first_page":
+            self.pagina_actual = 1
 
-    # ------------------------------------------------------------------
-    # Procesamiento de mensajes
-    # ------------------------------------------------------------------
-
-    def process_message(self, mensaje: str) -> None:
-        """
-        Procesa el mensaje entrante del usuario.
-        - Si hay una función en 'waiting_for' y el mensaje NO es un comando,
-          se delega a esa función.
-        - Si el mensaje empieza con '/', se intenta ejecutar como comando.
-        - En otro caso, se avisa que debe usar un comando.
-        """
-        if mensaje is None:
-            return
-
-        mensaje = mensaje.strip()
-        if not mensaje:
-            return
-
-        # 1) Si el mensaje es un comando, siempre priorizamos el comando
-        if mensaje.startswith('/'):
-            comando = mensaje.split()[0]  # Tomar solo el comando sin argumentos
-            if comando in self.function_graph:
-                try:
-                    self.function_graph[comando]["function"](mensaje)
-                except Exception as exc:
-                    # Manejo básico de errores de comandos
-                    self.enviar("⚠️ Ocurrió un error al ejecutar el comando.")
-                    print(f"Error en comando {comando}: {exc}")
+        elif accion_id == "ordenar":
+            # Alternar modo de orden
+            if self.orden_por_precio == "asc":
+                self.orden_por_precio = "desc"
             else:
-                self.enviar("❌ Comando no reconocido. Usa /ayuda para ver los comandos disponibles.")
-            return
+                self.orden_por_precio = "asc"
+            # Opcional: volver a la primera página
+            self.pagina_actual = 1
 
-        # 2) Si no es comando y hay una función esperando la respuesta
-        if self.waiting_for is not None:
-            try:
-                self.waiting_for(mensaje)
-            except Exception as exc:
-                self.enviar("⚠️ Ocurrió un error al procesar tu mensaje.")
-                print(f"Error en waiting_for: {exc}")
-            return
+        elif accion_id == "filtrar_categoria":
+            # Por ahora no implementamos el filtro real.
+            # Podés más adelante pedirle al usuario la categoría deseada.
+            # Ejemplo: self.categoria_actual = "Hamburguesas"
+            pass
 
-        # 3) Si no hay función en espera y no es comando
-        self.enviar("❌ Por favor usa un comando. Escribe /ayuda para ver las opciones disponibles.")
-
-
-# Crear instancia global del bot
-bot = Chat()
+        # Después de cambiar el estado, devolvemos el nuevo menú
+        return self.generar_mensaje_menu()

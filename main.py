@@ -131,6 +131,8 @@ async def received_message(request: Request):
             or content.startswith("categoria_")
         )
 
+
+
         if es_accion_menu:
             nuevo_mensaje = chat.manejar_accion(content)
             payload = {

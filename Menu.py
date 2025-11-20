@@ -16,7 +16,7 @@ menuCompleto: List[Producto] = [
     {"id": "2",  "nombre": "Chillout",           "precio": 390, "categoria": "Hamburguesas", "descripcion": "Carne, cheddar, panceta, BBQ"},
     {"id": "3",  "nombre": "Bunker",             "precio": 450, "categoria": "Hamburguesas", "descripcion": "Triple carne, cheddar, huevo"},
     {"id": "4",  "nombre": "Clásica",            "precio": 300, "categoria": "Hamburguesas", "descripcion": "Carne, cheddar, tomate, mayo"},
-    {"id": "5",  "nombre": "Hamburguesa Vegana", "precio": 330, "categoria": "Hamburguesas", "descripcion": "Hamburguesa de lentejas y vegetales"},
+    {"id": "5",  "nombre": "Vegan Burger",       "precio": 330, "categoria": "Hamburguesas", "descripcion": "Hamburguesa de lentejas y vegetales"},
 
     {"id": "6",  "nombre": "Napolitana",         "precio": 430, "categoria": "Pizzas", "descripcion": "Tomate, muzza, albahaca"},
     {"id": "7",  "nombre": "Cuatro Quesos",      "precio": 520, "categoria": "Pizzas", "descripcion": "Muzza, parmesano, roquefort, provolone"},

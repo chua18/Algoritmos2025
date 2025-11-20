@@ -62,6 +62,7 @@ async def send_menu(to: str, nombre: str = "Cliente") -> None:
     """
     Envía el menú actual (paginado) al usuario usando tu Chat.
     """
+    
     msg = chat.generar_mensaje_menu()
     payload = {
         "messaging_product": "whatsapp",
@@ -142,7 +143,16 @@ async def received_message(request: Request):
                 "interactive": nuevo_mensaje,
             }
             await send_to_whatsapp(payload)
+        
+        # 👇 COMANDOS ESPECIALES PARA RESETEAR
+        elif content.lower() in ["/reset", "/inicio", "menu"]:
+            chat.reset_estado()
+            await send_menu(number, name)
+
         else:
+            # 👇 acá en el futuro va la lógica de carrito, cantidades, etc.
+            # ej: chat.manejar_texto_libre(number, content)
+            # por ahora, si querés, podés seguir mostrando el menú:
             await send_menu(number, name)
 
         return "EVENT_RECEIVED"

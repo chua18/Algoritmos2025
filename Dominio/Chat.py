@@ -4,6 +4,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from Menu import menuCompleto  # <-- tu menú de productos
+from Dominio.Pedidos import Pedido, ItemCarrito  # 👈 importás tus modelos
 
 PAGE_SIZE = 5
 
@@ -293,3 +294,80 @@ class Chat:
 
         # Cualquier otra cosa: devolvemos el menú actual
         return self.generar_mensaje_menu()
+    
+    
+        # ----------------- CARRITO ----------------- #
+
+    def _buscar_producto_por_row_id(self, row_id: str) -> Optional[Dict[str, Any]]:
+        """
+        row_id viene del menú, ej: 'producto_6'.
+        Devuelve el dict del producto correspondiente en menuCompleto.
+        """
+        if not row_id.startswith("producto_"):
+            return None
+
+        id_producto = row_id.split("_", 1)[1]  # "6", "10", etc.
+
+        for p in menuCompleto:
+            if str(p["id"]) == str(id_producto):
+                return p
+        return None
+
+    def agregar_producto_al_carrito(
+        self, telefono: str, row_id: str
+    ) -> tuple[ItemCarrito, int]:
+        """
+        Agrega un producto (por row_id tipo 'producto_6') al carrito de ese teléfono.
+        Devuelve (item_agregado, total_actual_del_carrito).
+        """
+        producto = self._buscar_producto_por_row_id(row_id)
+        if not producto:
+            raise ValueError(f"No se encontró producto para row_id={row_id!r}")
+
+        if telefono not in self.pedidos:
+            self.pedidos[telefono] = Pedido(telefono_cliente=telefono)
+
+        pedido = self.pedidos[telefono]
+
+        item = ItemCarrito(
+            id_producto=str(producto["id"]),
+            nombre=producto["nombre"],
+            precio=int(producto["precio"]),
+            cantidad=1,
+        )
+
+        pedido.agregar_item(item)
+        total = pedido.total
+
+        logging.info(
+            f"[CARRITO] Tel={telefono} agregó {item.nombre} (${item.precio}), total={total}"
+        )
+
+        return item, total
+
+    def resumen_carrito(self, telefono: str) -> str:
+        """
+        Devuelve un texto con el contenido del carrito de ese teléfono.
+        """
+        pedido = self.pedidos.get(telefono)
+        if not pedido or not pedido.items:
+            return "🧺 Tu carrito está vacío por ahora."
+
+        lineas: List[str] = ["🧺 *Tu carrito actual:*"]
+        for idx, item in enumerate(pedido.items, start=1):
+            subtotal = item.precio * item.cantidad
+            lineas.append(f"{idx}. {item.nombre} x{item.cantidad} = ${subtotal}")
+
+        lineas.append(f"\n💵 *Total:* ${pedido.total}")
+        lineas.append("\nEscribí *confirmar* para finalizar o *borrar* para vaciar el carrito.")
+        return "\n".join(lineas)
+
+    def vaciar_carrito(self, telefono: str) -> None:
+        """
+        Vacía el carrito de ese teléfono.
+        """
+        pedido = self.pedidos.get(telefono)
+        if pedido:
+            pedido.items.clear()
+            logging.info(f"[CARRITO] Tel={telefono} vació su carrito.")
+

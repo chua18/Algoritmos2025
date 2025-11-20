@@ -1,170 +1,156 @@
-# main.py
-from fastapi import FastAPI, Request, HTTPException, Query
-from fastapi.responses import PlainTextResponse
-import httpx
 import os
 import logging
+from typing import Any, Dict
 
-from Dominio.Chat import bot               # Clase Chat (bot global)
-from Dominio import Pedidos        # Import necesario para registrar comandos (no se usa directo)
+import httpx
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import PlainTextResponse
 
-# Configuración básica de logging
+from Dominio.Chat import Chat
+from utils.get_message_type import get_message_type
+
+# -----------------------------------
+# CONFIGURACIÓN BÁSICA
+# -----------------------------------
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Variables de entorno necesarias para WhatsApp / Meta
-WHATSAPP_URL = os.getenv("GRAPH_SEND_URL")   # p.ej. https://graph.facebook.com/v22.0/<PHONE_ID>/messages
-ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")     # Token de acceso de Meta
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")     # Token de verificación para el webhook (GET)
 
 app = FastAPI()
 
+# Instancia de tu Chat anterior
+chat = Chat()
 
-# -------------------------------------------------------------------
-# Funciones auxiliares para enviar y recibir mensajes
-# -------------------------------------------------------------------
+# --- CREDENCIALES Y CONFIGURACIÓN ---
+ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")
+PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID", "")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "")
+VERSION = os.getenv("VERSION", "v22.0")
 
-def enviar_texto_whatsapp(to: str, body: str) -> None:
+GRAPH_SEND_URL = f"https://graph.facebook.com/{VERSION}/{PHONE_NUMBER_ID}/messages"
+
+logging.info(f"ACCESS_TOKEN cargado? {bool(ACCESS_TOKEN)}")
+logging.info(f"PHONE_NUMBER_ID: {PHONE_NUMBER_ID!r}")
+logging.info(f"GRAPH_SEND_URL: {GRAPH_SEND_URL}")
+
+
+# --------------------------------------------------------
+# FUNCIONES AUXILIARES PARA ENVIAR MENSAJES A WHATSAPP
+# --------------------------------------------------------
+async def send_to_whatsapp(payload: Dict[str, Any]) -> None:
     """
-    Envía un mensaje de texto simple a través de la API de WhatsApp.
+    Envía un payload crudo a la API de WhatsApp.
     """
-    if not WHATSAPP_URL or not ACCESS_TOKEN:
-        logger.error("Faltan WHATSAPP_URL o ACCESS_TOKEN en las variables de entorno.")
+    if not ACCESS_TOKEN or not PHONE_NUMBER_ID:
+        logging.warning(
+            f"Falta ACCESS_TOKEN o PHONE_NUMBER_ID. "
+            f"(ACCESS_TOKEN={bool(ACCESS_TOKEN)}, PHONE_NUMBER_ID={bool(PHONE_NUMBER_ID)})"
+        )
+        logging.info(f"MOCK SEND => {payload}")
         return
-
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {"body": body},
-    }
 
     headers = {
         "Authorization": f"Bearer {ACCESS_TOKEN}",
         "Content-Type": "application/json",
     }
 
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.post(GRAPH_SEND_URL, headers=headers, json=payload)
+        logging.info(f"Respuesta WhatsApp: {resp.status_code} {resp.text}")
+        resp.raise_for_status()
+
+
+async def send_menu(to: str, nombre: str = "Cliente") -> None:
+    """
+    Envía el menú actual (paginado) al usuario usando tu Chat.
+    """
+    msg = chat.generar_mensaje_menu()
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": msg,
+    }
+    print(f"payload del menú paginado:\n{payload}")
+    await send_to_whatsapp(payload)
+
+
+# --------------------------------------------------------
+# ENDPOINTS
+# --------------------------------------------------------
+
+@app.get("/welcome")
+def index():
+    return {"mensaje": "welcome developer"}
+
+
+# ✅ VERIFICACIÓN DEL WEBHOOK (GET /whatsapp)
+@app.get("/whatsapp", response_class=PlainTextResponse)
+async def verify_token_endpoint(request: Request):
+    params = request.query_params
+    token = params.get("hub.verify_token")
+    challenge = params.get("hub.challenge")
+    mode = params.get("hub.mode")
+
+    logging.info(
+        f"[WEBHOOK VERIFY] mode={mode!r}, token_param={token!r}, env_token={VERIFY_TOKEN!r}, challenge={challenge!r}"
+    )
+
+    # Meta manda hub.mode=subscribe cuando verifica
+    if token == VERIFY_TOKEN and challenge is not None:
+        return PlainTextResponse(challenge)
+
+    raise HTTPException(status_code=400, detail="Token de verificación inválido")
+
+
+# ✅ RECEPCIÓN DE MENSAJES (POST /whatsapp)
+@app.post("/whatsapp")
+async def received_message(request: Request):
     try:
-        response = httpx.post(WHATSAPP_URL, json=payload, headers=headers, timeout=10)
-        if response.status_code >= 400:
-            logger.error("Error al enviar mensaje a WhatsApp: %s - %s", response.status_code, response.text)
-    except Exception as exc:
-        logger.error("Excepción enviando mensaje a WhatsApp: %s", exc)
+        body = await request.json()
+        logging.info(f"Payload recibido: {body}")
 
-
-def enviar_texto_para_Bot(body: str) -> None:
-    """
-    Función que el bot usará como 'enviador'.
-    Toma el teléfono desde bot.user_phone (seteado en cada request).
-    """
-    if not bot.user_phone:
-        logger.warning("bot.user_phone está vacío, no se puede enviar el mensaje.")
-        return
-
-    enviar_texto_whatsapp(bot.user_phone, body)
-
-
-def extraer_mensaje_y_telefono(data: dict) -> tuple[str, str]:
-    """
-    Extrae el texto del mensaje y el número de teléfono
-    desde el payload enviado por WhatsApp.
-    Adaptar según el formato que estés usando (text, interactive, etc.).
-    """
-    try:
-        entry = data["entry"][0]
+        entry = body["entry"][0]
         changes = entry["changes"][0]
         value = changes["value"]
-        mensaje = value["messages"][0]
-    except (KeyError, IndexError) as exc:
-        logger.error("Formato inesperado del payload de WhatsApp: %s", exc)
-        raise HTTPException(status_code=400, detail="Formato inesperado del payload de WhatsApp")
 
-    texto = ""
+        # A veces llegan status en lugar de messages
+        if "messages" not in value or len(value["messages"]) == 0:
+            return "EVENT_RECEIVED"
 
-    tipo = mensaje.get("type")
-    if tipo == "text":
-        texto = mensaje["text"]["body"]
-    elif tipo == "interactive":
-        interactive = mensaje["interactive"]
-        if "list_reply" in interactive:
-            texto = interactive["list_reply"]["id"]
-        elif "button_reply" in interactive:
-            texto = interactive["button_reply"]["id"]
+        message = value["messages"][0]
+        type_message, content = get_message_type(message)
+        number = message["from"]
+
+        contacts = value.get("contacts", [])
+        name = contacts[0].get("profile", {}).get("name", "Cliente") if contacts else "Cliente"
+
+        print(f"Mensaje recibido de {number}: {content} (tipo: {type_message})")
+
+        # WhatsApp List devuelve el ID de la fila (row)
+        if content in ["next_page", "prev_page", "ordenar", "filtrar_categoria", "go_first_page"]:
+            nuevo_mensaje = chat.manejar_accion(content)
+            payload = {
+                "messaging_product": "whatsapp",
+                "to": number,
+                "type": "interactive",
+                "interactive": nuevo_mensaje,
+            }
+            await send_to_whatsapp(payload)
         else:
-            logger.warning("Tipo de mensaje interactivo no manejado: %s", interactive)
-            texto = ""
-    else:
-        logger.warning("Tipo de mensaje no manejado: %s", tipo)
-        texto = ""
+            # Primer mensaje o texto cualquiera → mostrar menú inicial
+            await send_menu(number, name)
 
-    telefono = mensaje.get("from", "")
+        return "EVENT_RECEIVED"
 
-    if not telefono:
-        raise HTTPException(status_code=400, detail="No se pudo obtener el teléfono del remitente")
-
-    return texto, telefono
+    except Exception as e:
+        print("Error en /whatsapp:", e)
+        # Siempre devolver EVENT_RECEIVED para que Meta no reintente sin fin
+        return "EVENT_RECEIVED"
 
 
-# -------------------------------------------------------------------
-# Rutas de FastAPI
-# -------------------------------------------------------------------
+# --------------------------------------------------------
+# MAIN LOCAL
+# --------------------------------------------------------
+if __name__ == "__main__":
+    import uvicorn
 
-@app.get("/", response_class=PlainTextResponse)
-async def root():
-    """
-    Endpoint simple para comprobar que la app está corriendo.
-    """
-    return "API de WhatsApp bot (Obligatorio Algoritmos) funcionando."
-
-
-@app.get("/webhook", response_class=PlainTextResponse)
-async def verificar_webhook(
-    hub_mode: str | None = Query(None, alias="hub.mode"),
-    hub_verify_token: str | None = Query(None, alias="hub.verify_token"),
-    hub_challenge: str | None = Query(None, alias="hub.challenge"),
-):
-    """
-    Verificación del webhook de Meta (GET).
-    Meta llama a este endpoint cuando configurás el webhook.
-    """
-    if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
-        # Devolver el challenge que envía Meta
-        logger.info("Webhook verificado correctamente.")
-        return hub_challenge or ""
-    else:
-        logger.warning("Intento de verificación de webhook fallido.")
-        raise HTTPException(status_code=403, detail="Token de verificación inválido")
-
-
-@app.post("/webhook")
-async def webhook_whatsapp(request: Request):
-    """
-    Endpoint que recibe los mensajes de WhatsApp (POST).
-    Cada mensaje se pasa al 'bot' para que lo procese.
-    """
-    data = await request.json()
-    logger.info("Payload recibido de WhatsApp: %s", data)
-
-    # WhatsApp envía también notificaciones que no son mensajes (ej: status)
-    # Filtramos y procesamos solo si hay 'messages'
-    try:
-        value = data["entry"][0]["changes"][0]["value"]
-        if "messages" not in value:
-            # No hay mensajes (puede ser una notificación de estado)
-            return {"status": "ok"}
-    except (KeyError, IndexError):
-        return {"status": "ok"}
-
-    # 1. Extraer texto y teléfono
-    texto, telefono = extraer_mensaje_y_telefono(data)
-
-    # 2. Configurar el teléfono actual en el bot
-    bot.user_phone = telefono
-
-    # 3. Configurar el "enviador" sin usar lambda
-    bot.enviador = enviar_texto_para_Bot
-
-    # 4. Pasar el mensaje al cerebro del bot
-    bot.process_message(texto)
-
-    return {"status": "ok"}
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

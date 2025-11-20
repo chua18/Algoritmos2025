@@ -57,8 +57,10 @@ class Chat:
     def generar_mensaje_menu(self) -> Dict[str, Any]:
         """
         Menú de productos (list) respetando los límites de WhatsApp.
-        Muestra primero una sección de ACCIONES (incluye Filtrar categoría)
-        y luego una sección con los productos de la página actual.
+        - Si NO hay filtro de categoría: menú normal paginado.
+        - Si HAY filtro y esa categoría tiene <= PAGE_SIZE productos:
+            * No muestra 'Siguiente página' ni 'Volver al inicio'
+            * Muestra 'Mostrar todos los productos' (limpiar filtro)
         """
         productos = self._obtener_menu_actual()
 
@@ -80,44 +82,70 @@ class Chat:
                 "description": descripcion,
             })
 
+        # --------- LÓGICA DE VALIDACIÓN POR CATEGORÍA --------- #
+        # ¿Estamos filtrando por categoría?
+        esta_filtrado = self.categoria_actual is not None
+
+        # Total de productos de la categoría actual (SIN paginar)
+        if esta_filtrado:
+            total_categoria = sum(
+                1
+                for p in menuCompleto
+                if p.get("categoria", "").lower() == self.categoria_actual.lower()
+            )
+        else:
+            total_categoria = len(menuCompleto)
+
+        # ¿La categoría tiene MÁS de PAGE_SIZE elementos?
+        hay_multiples_paginas = total_categoria > PAGE_SIZE
+
         # --------- FILAS DE ACCIONES --------- #
         rows_acciones: List[Dict[str, Any]] = []
 
-        if self.pagina_actual > 1:
+        # Solo mostramos 'Página anterior' si estamos en página > 1
+        if self.pagina_actual > 1 and hay_multiples_paginas:
             rows_acciones.append({
                 "id": "prev_page",
                 "title": "⬅️ Página anterior",
                 "description": "Volver a la página anterior",
             })
 
-        rows_acciones.append({
-            "id": "next_page",
-            "title": "➡️ Siguiente página",
-            "description": "Ver más productos",
-        })
+        # --- CASO 1: categoría con muchas filas o sin filtro → paginado normal ---
+        if (not esta_filtrado) or (esta_filtrado and hay_multiples_paginas):
+            rows_acciones.append({
+                "id": "next_page",
+                "title": "➡️ Siguiente página",
+                "description": "Ver más productos",
+            })
 
-        # 🔎 ESTA ES LA QUE QUERÉS VER
-        rows_acciones.append({
-            "id": "filtrar_categoria",
-            "title": "🔎 Filtrar categoría",
-            "description": "Elegir una categoría de productos",
-        })
+            rows_acciones.append({
+                "id": "go_first_page",
+                "title": "⏮ Volver al inicio",
+                "description": "Ir a la primera página del menú",
+            })
 
+        # --- CASO 2: categoría filtrada con <= PAGE_SIZE productos ---
+        # Mostrar botón para limpiar filtro / ver todos
+        if esta_filtrado and not hay_multiples_paginas:
+            rows_acciones.append({
+                "id": "limpiar_filtro",
+                "title": "Ver todos",
+                "description": "Mostrar todos los productos",
+            })
+
+        # Ordenar lo mostramos siempre
         rows_acciones.append({
             "id": "ordenar",
             "title": "↕️ Ordenar precio",
             "description": "Alternar entre barato y caro",
         })
 
+        # Botón para ir a elegir categoría (siempre)
         rows_acciones.append({
-            "id": "go_first_page",
-            "title": "⏮ Volver al inicio",
-            "description": "Ir a la primera página del menú",
+            "id": "filtrar_categoria",
+            "title": "🔎 Filtrar categoría",
+            "description": "Elegir una categoría de productos",
         })
-
-        # OJO: máximo 10 filas entre todas las secciones
-        # Primera página: 4 acciones + 5 productos = 9 (OK)
-        # Página >1: 5 acciones + 5 productos = 10 (OK)
 
         mensaje_interactivo: Dict[str, Any] = {
             "type": "list",
@@ -135,12 +163,12 @@ class Chat:
                 "button": "Ver opciones",
                 "sections": [
                     {
-                        "title": "Acciones",
-                        "rows": rows_acciones,
-                    },
-                    {
                         "title": "Productos disponibles",
                         "rows": rows_productos,
+                    },
+                     {
+                        "title": "Acciones",
+                        "rows": rows_acciones,
                     },
                 ],
             },
@@ -213,6 +241,7 @@ class Chat:
         - 'next_page', 'prev_page', 'go_first_page', 'ordenar'
         - 'filtrar_categoria'
         - 'categoria_<Nombre>'
+        - 'limpiar_filtro'
         """
         # Navegación entre páginas
         if accion_id == "next_page":
@@ -233,11 +262,17 @@ class Chat:
                 self.orden_por_precio = "asc"
             self.pagina_actual = 1
 
-        # 🔎 Mostrar menú de categorías
+        # Mostrar menú de categorías
         elif accion_id == "filtrar_categoria":
             return self.generar_mensaje_categorias()
 
-        # ✅ Usuario eligió una categoría (categoria_X)
+        # ✅ NUEVO: limpiar filtro / ver todos
+        elif accion_id == "limpiar_filtro":
+            self.categoria_actual = None
+            self.pagina_actual = 1
+            return self.generar_mensaje_menu()
+
+        # Usuario eligió una categoría
         elif accion_id.startswith("categoria_"):
             categoria = accion_id[len("categoria_"):]
             if categoria == "Todos":
@@ -246,5 +281,6 @@ class Chat:
                 self.categoria_actual = categoria
             self.pagina_actual = 1
             return self.generar_mensaje_menu()
+
         # Cualquier otra cosa: devolvemos el menú actual
         return self.generar_mensaje_menu()

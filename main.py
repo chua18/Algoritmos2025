@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import httpx
 from fastapi import FastAPI, Request, HTTPException
@@ -124,7 +124,7 @@ async def received_message(request: Request):
         changes = entry["changes"][0]
         value = changes["value"]
 
-        # A veces llegan solo "statuses" sin messages
+        # A veces llegan solo "statuses", sin mensajes nuevos
         if "messages" not in value or len(value["messages"]) == 0:
             return "EVENT_RECEIVED"
 
@@ -137,13 +137,16 @@ async def received_message(request: Request):
 
         print(f"Mensaje recibido de {number}: {content} (tipo: {type_message})")
 
-        # Normalizamos el texto para comandos
         texto_normalizado = ""
         if isinstance(content, str):
             texto_normalizado = content.strip().lower()
 
+        # ==========================
+        # 0) MANEJO DE FASES (CANTIDAD / DETALLES)
+        # ==========================
         estado = estado_usuarios.get(number)
-         # Fase 1: esperando cantidad
+
+        # FASE: esperar cantidad
         if estado and estado.get("fase") == "esperando_cantidad" and type_message == "text":
             try:
                 cantidad = int(texto_normalizado)
@@ -156,71 +159,119 @@ async def received_message(request: Request):
                 )
                 return "EVENT_RECEIVED"
 
-            # Guardamos la cantidad y pasamos a fase detalle
-            estado["cantidad"] = cantidad
-            estado["fase"] = "esperando_detalle"
+            # Pasamos a fase de detalle unitario
+            estado["fase"] = "detalles_por_unidad"
+            estado["cantidad_total"] = cantidad
+            estado["indice_actual"] = 1
+            estado["detalles"] = []
+
+            prod = chat._buscar_producto_por_row_id(estado["row_id"])
+            nombre_prod = prod["nombre"] if prod else "el producto"
+
             await send_text(
                 number,
-                "📝 ¿Querés quitar algún ingrediente?\n"
-                "Escribí por ejemplo: *sin cebolla y sin tomate*.\n"
-                "Si va normal, respondé *no*."
+                f"📝 Para la unidad 1 de *{nombre_prod}*, "
+                "¿la querés *completa* o con alguna modificación?\n"
+                "Ejemplo: *completa* o *sin panceta*."
             )
             return "EVENT_RECEIVED"
 
-        # Fase 2: esperando detalle
-        if estado and estado.get("fase") == "esperando_detalle" and type_message == "text":
-            detalle = content.strip()
-            if detalle.lower() == "no":
-                detalle = ""
+        # FASE: pedir detalle por cada unidad
+        if estado and estado.get("fase") == "detalles_por_unidad" and type_message == "text":
+            detalle_texto = content.strip()
 
-            row_id = estado["row_id"]
-            cantidad = estado.get("cantidad", 1)
+            # Normalizamos "completa", "normal", "no" como sin detalle extra
+            if detalle_texto.lower() in ("completa", "normal", "no"):
+                detalle_texto = ""
 
-            # Ahora sí, agregamos al carrito
-            item, total = chat.agregar_producto_al_carrito(
-                telefono=number,
-                row_id=row_id,
-                cantidad=cantidad,
-                detalle=detalle,
-            )
+            # Guardamos detalle de la unidad actual
+            estado["detalles"].append(detalle_texto)
+
+            cantidad_total = estado["cantidad_total"]
+            indice_actual = estado["indice_actual"] + 1
+            estado["indice_actual"] = indice_actual
+
+            prod = chat._buscar_producto_por_row_id(estado["row_id"])
+            nombre_prod = prod["nombre"] if prod else "el producto"
+
+            if indice_actual <= cantidad_total:
+                # Falta preguntar por más unidades
+                await send_text(
+                    number,
+                    f"📝 Para la unidad {indice_actual} de *{nombre_prod}*, "
+                    "¿la querés *completa* o con alguna modificación?"
+                )
+                return "EVENT_RECEIVED"
+
+            # Ya tenemos todos los detalles → agrupamos por tipo de detalle
+            from collections import Counter
+            from Dominio.Modelos import ItemCarrito  # ajustá el import al archivo donde esté
+
+            detalles = estado["detalles"]  # lista de strings ("" para completas)
+            contador = Counter(detalles)
+
+            # Para cada tipo de detalle, agregamos un ItemCarrito con esa cantidad
+            total = None
+            items_creados: List[ItemCarrito] = []
+
+            for detalle_valor, cant in contador.items():
+                item, total = chat.agregar_producto_al_carrito(
+                    telefono=number,
+                    row_id=estado["row_id"],
+                    cantidad=cant,
+                    detalle=detalle_valor,
+                )
+                items_creados.append(item)
 
             # Limpiamos el estado temporal
             del estado_usuarios[number]
 
-            texto_detalle = f" (📝 {item.detalle})" if item.detalle else ""
-            mensaje = (
-                f"✅ *{item.nombre}* x{item.cantidad}{texto_detalle} agregado al carrito.\n"
-                f"💵 Total actual: ${total}\n\n"
-                "Escribí *carrito* para ver todo lo que llevás."
-            )
-            await send_text(number, mensaje)
-            # Opcional: volvemos a mostrar el menú
+            # Armamos un resumen para este producto
+            lineas = []
+            nombre_base = items_creados[0].nombre if items_creados else "Producto"
+            cantidad_total = sum(it.cantidad for it in items_creados)
+            lineas.append(f"✅ *{nombre_base}* x{cantidad_total} agregado al carrito:")
+
+            for it in items_creados:
+                if it.detalle:
+                    lineas.append(f"   - x{it.cantidad} ({it.detalle})")
+                else:
+                    lineas.append(f"   - x{it.cantidad} completas")
+
+            if total is not None:
+                lineas.append(f"\n💵 Total actual (con descuentos aplicados): ${total}")
+
+            lineas.append("\nEscribí *carrito* para ver todo lo que llevás.")
+
+            await send_text(number, "\n".join(lineas))
+            # Opcional: volver a mostrar el menú
             await send_menu(number, name)
             return "EVENT_RECEIVED"
 
-        # 1) ¿Seleccionó un PRODUCTO del menú? (row id: 'producto_X')
+        # ==========================
+        # 1) SELECCIÓN DE PRODUCTO (LISTA)
+        # ==========================
         es_producto = isinstance(content, str) and content.startswith("producto_")
-
         if es_producto:
-            # Iniciamos flujo de cantidad
+            # Iniciamos flujo: primero cantidad
             estado_usuarios[number] = {
                 "fase": "esperando_cantidad",
                 "row_id": content,
             }
 
-            # Podés recuperar el nombre del producto para hacer el mensaje más lindo
             prod = chat._buscar_producto_por_row_id(content)
-            nombre = prod["nombre"] if prod else "el producto elegido"
+            nombre_prod = prod["nombre"] if prod else "el producto elegido"
 
             await send_text(
                 number,
-                f"🍽 ¿Cuántas unidades de *{nombre}* querés?\n"
-                "Escribí un número, por ejemplo *1* o *2*."
+                f"🍽 ¿Cuántas unidades de *{nombre_prod}* querés?\n"
+                "Escribí un número, por ejemplo *1* o *3*."
             )
             return "EVENT_RECEIVED"
 
-
-        # 2) ¿Es una acción del MENÚ (paginado / filtros / categorías)?
+        # ==========================
+        # 2) ACCIONES DEL MENÚ (next_page, ordenar, filtrar_categoria, etc.)
+        # ==========================
         es_accion_menu = (
             isinstance(content, str)
             and (
@@ -240,32 +291,60 @@ async def received_message(request: Request):
             await send_to_whatsapp(payload)
             return "EVENT_RECEIVED"
 
-        # 3) COMANDOS DE TEXTO: reset, ver carrito, vaciar carrito
-
-        # Reset de menú (sin tocar carrito)
-        if texto_normalizado in ("/reset", "/inicio", "menu"):
-            chat.reset_estado()
-            await send_menu(number, name)
-            return "EVENT_RECEIVED"
-
-        # Ver carrito
+        # ==========================
+        # 3) COMANDOS DE TEXTO (carrito, borrar, reset, confirmar)
+        # ==========================
         if texto_normalizado in ("carrito", "/carrito"):
             resumen = chat.resumen_carrito(number)
             await send_text(number, resumen)
             return "EVENT_RECEIVED"
 
-        # Vaciar carrito
         if texto_normalizado in ("borrar", "vaciar", "/borrar"):
             chat.vaciar_carrito(number)
             await send_text(number, "🧺 Carrito vaciado.")
             return "EVENT_RECEIVED"
 
-        # 4) Cualquier otro texto (por ahora) → mostrar menú
+        if texto_normalizado in ("/reset", "reset", "/salir", "salir"):
+            # limpiamos estado de menú y carrito de ese user
+            chat.reset_estado()
+            estado_usuarios.pop(number, None)
+            chat.vaciar_carrito(number)
+            await send_text(
+                number,
+                "🔄 Se reinició la conversación y el carrito. "
+                "Escribí cualquier cosa para ver el menú desde cero."
+            )
+            return "EVENT_RECEIVED"
+
+         # ✅ CONFIRMAR PEDIDO
+        if texto_normalizado in ("confirmar", "/confirmar"):
+            pedido = chat.pedidos.get(number)
+
+            if not pedido or not pedido.items:
+                await send_text(
+                    number,
+                    "🧺 Tu carrito está vacío, todavía no puedo confirmar nada.\n"
+                    "Elegí algún producto del menú primero."
+                )
+                return "EVENT_RECEIVED"
+
+            resumen = chat.resumen_carrito(number)
+
+            await send_text(
+                number,
+                resumen
+                + "\n\n✅ *Pedido confirmado.*\n"
+                  "En la siguiente etapa te voy a pedir tu ubicación para calcular el envío."
+            )
+        # ==========================
+        # 4) CUALQUIER OTRO TEXTO → MOSTRAR MENÚ
+        # ==========================
         await send_menu(number, name)
         return "EVENT_RECEIVED"
 
     except Exception as e:
         print("Error en /whatsapp:", e)
+        # Siempre devolver EVENT_RECEIVED para que Meta no reintente infinitamente
         return "EVENT_RECEIVED"
 
 

@@ -7,6 +7,7 @@ class ItemCarrito:
     nombre: str
     precio: int
     cantidad: int = 1
+    detalle: str = ""   # 👈 “sin panceta”, “completa”, etc.
 
 
 @dataclass
@@ -17,12 +18,39 @@ class Pedido:
 
     @property
     def total(self) -> int:
-        return sum(item.precio * item.cantidad for item in self.items)
+        """
+        Total con descuento:
+        - Para cada producto (id_producto), si la suma de cantidades >= 3,
+          aplica 5% de descuento sobre el subtotal de ese producto.
+        """
+        # Agrupamos por producto
+        productos = {}  # id_producto -> {"cantidad": int, "subtotal": int}
+        for item in self.items:
+            key = item.id_producto
+            subtotal_item = item.precio * item.cantidad
+            if key not in productos:
+                productos[key] = {"cantidad": 0, "subtotal": 0}
+            productos[key]["cantidad"] += item.cantidad
+            productos[key]["subtotal"] += subtotal_item
+
+        total = 0
+        for data in productos.values():
+            if data["cantidad"] >= 3:
+                # 5% de descuento para ese grupo
+                total += int(round(data["subtotal"] * 0.95))
+            else:
+                total += data["subtotal"]
+
+        return total
 
     def agregar_item(self, item: ItemCarrito) -> None:
-        """Si el producto ya está en el carrito, solo aumenta la cantidad."""
+        """
+        Si el producto ya está en el carrito con el mismo 'detalle',
+        solo aumenta la cantidad. Si el detalle cambia, es otra “sub-línea”.
+        """
         for existente in self.items:
-            if existente.id_producto == item.id_producto:
+            if (existente.id_producto == item.id_producto
+                    and existente.detalle == item.detalle):
                 existente.cantidad += item.cantidad
                 return
         self.items.append(item)

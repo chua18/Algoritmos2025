@@ -348,20 +348,49 @@ class Chat:
         return item, total
 
     def resumen_carrito(self, telefono: str) -> str:
+        """
+        Devuelve un texto con el contenido del carrito de ese teléfono,
+        agrupando por producto y luego por detalle.
+        """
         pedido = self.pedidos.get(telefono)
         if not pedido or not pedido.items:
             return "🧺 Tu carrito está vacío por ahora."
 
-        lineas: List[str] = ["🧺 *Tu carrito actual:*"]
-        for idx, item in enumerate(pedido.items, start=1):
-            subtotal = item.precio * item.cantidad
-            linea = f"{idx}. {item.nombre} x{item.cantidad} = ${subtotal}"
-            if item.detalle:
-                linea += f"  (📝 {item.detalle})"
-            lineas.append(linea)
+        # Agrupamos por producto
+        productos: Dict[str, Dict[str, Any]] = {}
+        for item in pedido.items:
+            key = item.id_producto
+            if key not in productos:
+                productos[key] = {
+                    "nombre": item.nombre,
+                    "precio": item.precio,
+                    "detalles": {},   # detalle -> cantidad
+                    "cantidad_total": 0,
+                }
+            prod = productos[key]
+            prod["cantidad_total"] += item.cantidad
+            detalle_clave = item.detalle or "completa"
+            prod["detalles"][detalle_clave] = prod["detalles"].get(detalle_clave, 0) + item.cantidad
 
-        lineas.append(f"\n💵 *Total:* ${pedido.total}")
+        lineas: List[str] = ["🧺 *Tu carrito actual:*"]
+
+        for prod in productos.values():
+            nombre = prod["nombre"]
+            cant_total = prod["cantidad_total"]
+            lineas.append(f"\n• {nombre} x{cant_total}")
+
+            # Subdetalles: "x2 completas, x1 sin panceta"
+            subpartes = []
+            for detalle, cant in prod["detalles"].items():
+                if detalle == "completa":
+                    subpartes.append(f"x{cant} completas")
+                else:
+                    subpartes.append(f"x{cant} {detalle}")
+            lineas.append("   " + ", ".join(subpartes))
+
+        lineas.append(f"\n💵 *Total (con descuentos):* ${pedido.total}")
         lineas.append("\nEscribí *confirmar* para finalizar o *borrar* para vaciar el carrito.")
+
         return "\n".join(lineas)
 
 

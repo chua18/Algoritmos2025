@@ -14,6 +14,7 @@ class ItemCarrito:
     nombre: str
     precio: int
     cantidad: int = 1
+    detalle: str = ""
 
 
 @dataclass

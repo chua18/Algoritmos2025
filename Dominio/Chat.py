@@ -122,12 +122,73 @@ class Chat:
         }
 
         return mensaje_interactivo
+    
+    
+   #---------- MENÚ DE CATEGORÍAS ---------- #
+
+    def generar_mensaje_categorias(self) -> Dict[str, Any]:
+        """
+        Menú list SOLO con categorías para que el usuario elija una.
+        """
+        # Sacar categorías únicas del menú
+        categorias_set = {p["categoria"] for p in menuCompleto}
+        categorias = sorted(list(categorias_set))
+
+        rows: List[Dict[str, Any]] = []
+
+        # Opción "Todos"
+        rows.append({
+            "id": "categoria_Todos",
+            "title": "Todos",
+            "description": "Ver todos los productos",
+        })
+
+        for cat in categorias:
+            titulo = cat
+            if len(titulo) > 24:
+                titulo = titulo[:24]
+
+            rows.append({
+                "id": f"categoria_{cat}",
+                "title": titulo,
+                "description": "Ver solo esta categoría",
+            })
+
+        mensaje_interactivo: Dict[str, Any] = {
+            "type": "list",
+            "header": {
+                "type": "text",
+                "text": "Filtrar por categoría",
+            },
+            "body": {
+                "text": "📂 Elegí una categoría para filtrar el menú.",
+            },
+            "footer": {
+                "text": "Podés volver al menú general luego.",
+            },
+            "action": {
+                "button": "Ver categorías",
+                "sections": [
+                    {
+                        "title": "Categorías",
+                        "rows": rows,
+                    }
+                ],
+            },
+        }
+
+        return mensaje_interactivo
+
+    # ----------------- ACCIONES ----------------- #
 
     def manejar_accion(self, accion_id: str) -> Dict[str, Any]:
         """
-        Maneja IDs como 'next_page', 'prev_page', 'ordenar', 'go_first_page', etc.
-        Devuelve de nuevo un 'interactive' para que main.py lo envíe.
+        Maneja IDs como:
+        - 'next_page', 'prev_page', 'go_first_page', 'ordenar'
+        - 'filtrar_categoria'
+        - 'categoria_<Nombre>'
         """
+        # Navegación entre páginas
         if accion_id == "next_page":
             self.pagina_actual += 1
 
@@ -138,20 +199,27 @@ class Chat:
         elif accion_id == "go_first_page":
             self.pagina_actual = 1
 
+        # Orden por precio
         elif accion_id == "ordenar":
-            # Alternar modo de orden
             if self.orden_por_precio == "asc":
                 self.orden_por_precio = "desc"
             else:
                 self.orden_por_precio = "asc"
-            # Opcional: volver a la primera página
             self.pagina_actual = 1
 
+        # 🔎 Mostrar menú de categorías
         elif accion_id == "filtrar_categoria":
-            # Por ahora no implementamos el filtro real.
-            # Podés más adelante pedirle al usuario la categoría deseada.
-            # Ejemplo: self.categoria_actual = "Hamburguesas"
-            pass
+            return self.generar_mensaje_categorias()
 
-        # Después de cambiar el estado, devolvemos el nuevo menú
+        # ✅ Usuario eligió una categoría (categoria_X)
+        elif accion_id.startswith("categoria_"):
+            categoria = accion_id[len("categoria_"):]
+            if categoria == "Todos":
+                self.categoria_actual = None
+            else:
+                self.categoria_actual = categoria
+            self.pagina_actual = 1
+            return self.generar_mensaje_menu()
+
+        # Cualquier otra cosa: devolvemos el menú actual
         return self.generar_mensaje_menu()

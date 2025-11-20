@@ -125,8 +125,13 @@ async def received_message(request: Request):
 
         print(f"Mensaje recibido de {number}: {content} (tipo: {type_message})")
 
-        # WhatsApp List devuelve el ID de la fila (row)
-        if content in ["next_page", "prev_page", "ordenar", "filtrar_categoria", "go_first_page"]:
+       # WhatsApp List devuelve el ID de la fila (row)
+        es_accion_menu = (
+            content in ["next_page", "prev_page", "ordenar", "filtrar_categoria", "go_first_page"]
+            or content.startswith("categoria_")
+        )
+
+        if es_accion_menu:
             nuevo_mensaje = chat.manejar_accion(content)
             payload = {
                 "messaging_product": "whatsapp",

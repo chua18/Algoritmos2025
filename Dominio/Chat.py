@@ -1,19 +1,14 @@
 # Dominio/Chat.py
-from dataclasses import dataclass, field
 import logging
 from typing import Any, Dict, List, Optional
 
-from Menu import menuCompleto  # <-- tu menú de productos
-from Dominio.Pedidos import Pedido, ItemCarrito  # 👈 importás tus modelos
+from Menu import menuCompleto  # tu menú completo de productos
+from Dominio.Pedidos import Pedido, ItemCarrito  # modelos de dominio (carrito/pedido)
 
 PAGE_SIZE = 5
 
 
-@dataclass
-class Pedido:
-    cliente: str
-    items: List[Dict[str, Any]] = field(default_factory=list)
-
+# ------------------ HELPER DE PAGINADO ------------------ #
 
 def get_paginated_menu(page: int = 1, categoria: Optional[str] = None) -> List[Dict[str, Any]]:
     """
@@ -33,6 +28,8 @@ def get_paginated_menu(page: int = 1, categoria: Optional[str] = None) -> List[D
     return productos[inicio:fin]
 
 
+# ------------------ CLASE CHAT ------------------ #
+
 class Chat:
     def __init__(self) -> None:
         # Estado para el paginado / filtros
@@ -40,8 +37,10 @@ class Chat:
         self.categoria_actual: Optional[str] = None
         self.orden_por_precio: Optional[str] = None  # "asc", "desc" o None
 
-        # Si más adelante querés, aquí podrías guardar pedidos por teléfono, etc.
+        # Carritos por teléfono: tel -> Pedido (de Dominio.Pedidos)
         self.pedidos: Dict[str, Pedido] = {}
+
+    # ----------------- ESTADO DEL MENÚ ----------------- #
 
     def reset_estado(self) -> None:
         """
@@ -55,9 +54,11 @@ class Chat:
         self.categoria_actual = None
         self.orden_por_precio = None
         logging.info(">>> RESET de estado de menú (pagina=1, sin categoria, sin orden)")
-    # ----------------- MENÚ PAGINADO ----------------- #
 
     def _obtener_menu_actual(self) -> List[Dict[str, Any]]:
+        """
+        Devuelve la página actual de productos, aplicando orden por precio si corresponde.
+        """
         productos = get_paginated_menu(self.pagina_actual, self.categoria_actual)
 
         if self.orden_por_precio == "asc":
@@ -66,7 +67,8 @@ class Chat:
             productos = sorted(productos, key=lambda p: p["precio"], reverse=True)
 
         return productos
-    
+
+    # ----------------- MENÚ PAGINADO PRINCIPAL ----------------- #
 
     def generar_mensaje_menu(self) -> Dict[str, Any]:
         """
@@ -84,7 +86,7 @@ class Chat:
 
         # --------- FILAS DE PRODUCTOS --------- #
         for producto in productos:
-            # Título: nombre recortado (máx 24 chars)
+            # Título: nombre recortado (máx 24 chars para WhatsApp)
             titulo = producto["nombre"]
             if len(titulo) > 24:
                 titulo = titulo[:24]
@@ -110,7 +112,6 @@ class Chat:
             productos_totales = menuCompleto
 
         total_items = len(productos_totales)
-        # páginas totales = ceil(total_items / PAGE_SIZE)
         total_paginas = (total_items + PAGE_SIZE - 1) // PAGE_SIZE if total_items > 0 else 1
 
         tiene_siguiente = self.pagina_actual < total_paginas
@@ -147,7 +148,7 @@ class Chat:
         # que usa la misma lógica que categoria_Todos del menú de categorías
         if esta_filtrado:
             rows_acciones.append({
-                "id": "categoria_Todos",       # 👈 importante para reutilizar la lógica
+                "id": "categoria_Todos",       # mismo ID que en el menú de categorías
                 "title": "Ver todos",
                 "description": "Mostrar todos los productos",
             })
@@ -197,17 +198,12 @@ class Chat:
 
         return mensaje_interactivo
 
-
-
-    
-    
-   #---------- MENÚ DE CATEGORÍAS ---------- #
+    # ---------- MENÚ DE CATEGORÍAS ---------- #
 
     def generar_mensaje_categorias(self) -> Dict[str, Any]:
         """
         Menú list SOLO con categorías para que el usuario elija una.
         """
-        # Sacar categorías únicas del menú
         categorias_set = {p["categoria"] for p in menuCompleto}
         categorias = sorted(list(categorias_set))
 
@@ -256,7 +252,7 @@ class Chat:
 
         return mensaje_interactivo
 
-    # ----------------- ACCIONES ----------------- #
+    # ----------------- ACCIONES DE MENÚ ----------------- #
 
     def manejar_accion(self, accion_id: str) -> Dict[str, Any]:
         # Navegación entre páginas
@@ -282,7 +278,7 @@ class Chat:
         elif accion_id == "filtrar_categoria":
             return self.generar_mensaje_categorias()
 
-        # ✅ Cualquier botón que empiece con 'categoria_'
+        # Cualquier botón que empiece con 'categoria_'
         elif accion_id.startswith("categoria_"):
             categoria = accion_id[len("categoria_"):]
             if categoria == "Todos":
@@ -294,9 +290,8 @@ class Chat:
 
         # Cualquier otra cosa: devolvemos el menú actual
         return self.generar_mensaje_menu()
-    
-    
-        # ----------------- CARRITO ----------------- #
+
+    # ----------------- CARRITO ----------------- #
 
     def _buscar_producto_por_row_id(self, row_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -324,6 +319,7 @@ class Chat:
         if not producto:
             raise ValueError(f"No se encontró producto para row_id={row_id!r}")
 
+        # IMPORTANTE: asegurate que Dominio.Pedidos.Pedido tenga campo 'telefono_cliente'
         if telefono not in self.pedidos:
             self.pedidos[telefono] = Pedido(telefono_cliente=telefono)
 
@@ -370,4 +366,3 @@ class Chat:
         if pedido:
             pedido.items.clear()
             logging.info(f"[CARRITO] Tel={telefono} vació su carrito.")
-

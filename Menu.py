@@ -13,6 +13,7 @@ class Producto(TypedDict):
 # Lista completa de productos (se mantiene el nombre para no romper imports)
 menuCompleto: List[Producto] = [
     {"id": "1",  "nombre": "Doble cheese",       "precio": 320, "categoria": "Hamburguesas", "descripcion": "Doble carne, cheddar, cebolla"},
+    {"id": "30",  "nombre": "simpe cheese",       "precio": 270, "categoria": "Hamburguesas", "descripcion": "Carne simple, cheddar, cebolla"},
     {"id": "2",  "nombre": "Chillout",           "precio": 390, "categoria": "Hamburguesas", "descripcion": "Carne, cheddar, panceta, BBQ"},
     {"id": "3",  "nombre": "Bunker",             "precio": 450, "categoria": "Hamburguesas", "descripcion": "Triple carne, cheddar, huevo"},
     {"id": "4",  "nombre": "Clásica",            "precio": 300, "categoria": "Hamburguesas", "descripcion": "Carne, cheddar, tomate, mayo"},
@@ -45,6 +46,7 @@ menuCompleto: List[Producto] = [
     {"id": "26", "nombre": "Helado 1 bocha",     "precio": 160, "categoria": "Postres", "descripcion": "Vainilla o chocolate"},
     {"id": "27", "nombre": "Chocotorta",         "precio": 220, "categoria": "Postres", "descripcion": "Clásica chocotorta cremosa"},
     {"id": "28", "nombre": "Tiramisú",           "precio": 250, "categoria": "Postres", "descripcion": "Postre estilo italiano"},
+    {"id": "29", "nombre": "Cheesecake",         "precio": 270, "categoria": "Postres", "descripcion": "Postre de queso y frutos rojos"},
 ]
 
 

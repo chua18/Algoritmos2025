@@ -309,7 +309,11 @@ class Chat:
         return None
 
     def agregar_producto_al_carrito(
-        self, telefono: str, row_id: str
+        self,
+        telefono: str,
+        row_id: str,
+        cantidad: int = 1,
+        detalle: str = "",
     ) -> tuple[ItemCarrito, int]:
         """
         Agrega un producto (por row_id tipo 'producto_6') al carrito de ese teléfono.
@@ -319,7 +323,7 @@ class Chat:
         if not producto:
             raise ValueError(f"No se encontró producto para row_id={row_id!r}")
 
-        # IMPORTANTE: asegurate que Dominio.Pedidos.Pedido tenga campo 'telefono_cliente'
+        # 👇 Asegurate que el Pedido de Dominio/Pedidos tenga 'telefono_cliente'
         if telefono not in self.pedidos:
             self.pedidos[telefono] = Pedido(telefono_cliente=telefono)
 
@@ -329,22 +333,21 @@ class Chat:
             id_producto=str(producto["id"]),
             nombre=producto["nombre"],
             precio=int(producto["precio"]),
-            cantidad=1,
+            cantidad=cantidad,
+            detalle=detalle,
         )
 
         pedido.agregar_item(item)
         total = pedido.total
 
         logging.info(
-            f"[CARRITO] Tel={telefono} agregó {item.nombre} (${item.precio}), total={total}"
+            f"[CARRITO] Tel={telefono} agregó {item.nombre} x{item.cantidad} "
+            f"(${item.precio} c/u, detalle='{item.detalle}'), total={total}"
         )
 
         return item, total
 
     def resumen_carrito(self, telefono: str) -> str:
-        """
-        Devuelve un texto con el contenido del carrito de ese teléfono.
-        """
         pedido = self.pedidos.get(telefono)
         if not pedido or not pedido.items:
             return "🧺 Tu carrito está vacío por ahora."
@@ -352,11 +355,15 @@ class Chat:
         lineas: List[str] = ["🧺 *Tu carrito actual:*"]
         for idx, item in enumerate(pedido.items, start=1):
             subtotal = item.precio * item.cantidad
-            lineas.append(f"{idx}. {item.nombre} x{item.cantidad} = ${subtotal}")
+            linea = f"{idx}. {item.nombre} x{item.cantidad} = ${subtotal}"
+            if item.detalle:
+                linea += f"  (📝 {item.detalle})"
+            lineas.append(linea)
 
         lineas.append(f"\n💵 *Total:* ${pedido.total}")
         lineas.append("\nEscribí *confirmar* para finalizar o *borrar* para vaciar el carrito.")
         return "\n".join(lineas)
+
 
     def vaciar_carrito(self, telefono: str) -> None:
         """

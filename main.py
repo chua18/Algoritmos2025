@@ -113,7 +113,6 @@ async def received_message(request: Request):
         changes = entry["changes"][0]
         value = changes["value"]
 
-        # A veces llegan status en lugar de messages
         if "messages" not in value or len(value["messages"]) == 0:
             return "EVENT_RECEIVED"
 
@@ -126,40 +125,54 @@ async def received_message(request: Request):
 
         print(f"Mensaje recibido de {number}: {content} (tipo: {type_message})")
 
-       # WhatsApp List devuelve el ID de la fila (row)
-        es_accion_menu = (
-            content in ["next_page", "prev_page", "ordenar", "filtrar_categoria", "go_first_page"]
-            or content.startswith("categoria_")
-        )
+        # ========= 1) MENSAJES INTERACTIVOS (listas/botones) =========
+        if type_message == "interactive":
+            # content acá es el id del row: next_page, categoria_X, etc.
+            es_accion_menu = (
+                content in ["next_page", "prev_page", "ordenar", "filtrar_categoria", "go_first_page"]
+                or content.startswith("categoria_")
+            )
 
+            if es_accion_menu:
+                nuevo_mensaje = chat.manejar_accion(content)
+                payload = {
+                    "messaging_product": "whatsapp",
+                    "to": number,
+                    "type": "interactive",
+                    "interactive": nuevo_mensaje,
+                }
+                await send_to_whatsapp(payload)
+                return "EVENT_RECEIVED"
 
-
-        if es_accion_menu:
-            nuevo_mensaje = chat.manejar_accion(content)
-            payload = {
-                "messaging_product": "whatsapp",
-                "to": number,
-                "type": "interactive",
-                "interactive": nuevo_mensaje,
-            }
-            await send_to_whatsapp(payload)
-        
-        # 👇 COMANDOS ESPECIALES PARA RESETEAR
-        elif content.lower() in ["/reset", "/inicio", "menu"]:
-            chat.reset_estado()
+            # si quisieras, podrías tener otros interactivos no de menú acá
             await send_menu(number, name)
+            return "EVENT_RECEIVED"
 
-        else:
-            # 👇 acá en el futuro va la lógica de carrito, cantidades, etc.
-            # ej: chat.manejar_texto_libre(number, content)
-            # por ahora, si querés, podés seguir mostrando el menú:
+        # ========= 2) MENSAJES DE TEXTO =========
+        if type_message == "text":
+            texto = content.strip().lower()
+
+            # Comandos especiales: acá SÍ reseteamos
+            if texto in ("/reset", "/inicio", "menu"):
+                chat.reset_estado()
+                await send_menu(number, name)
+                return "EVENT_RECEIVED"
+
+            # Más adelante acá vas a meter lógica de carrito:
+            # - si texto es un número → cantidad
+            # - si texto es "confirmar" → confirmar pedido
+            # etc.
+            #
+            # Por ahora, si no hay nada de eso, podés volver a mostrar el menú
             await send_menu(number, name)
+            return "EVENT_RECEIVED"
 
+        # Si por alguna razón viene otro tipo
+        await send_menu(number, name)
         return "EVENT_RECEIVED"
 
     except Exception as e:
         print("Error en /whatsapp:", e)
-        # Siempre devolver EVENT_RECEIVED para que Meta no reintente sin fin
         return "EVENT_RECEIVED"
 
 

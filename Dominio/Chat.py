@@ -52,51 +52,72 @@ class Chat:
             productos = sorted(productos, key=lambda p: p["precio"], reverse=True)
 
         return productos
+    
 
     def generar_mensaje_menu(self) -> Dict[str, Any]:
         """
-        Construye el objeto 'interactive' para WhatsApp List
-        en base a la página y categoría actuales.
-        ES EXACTAMENTE lo que main.py espera que devuelva.
+        Menú de productos (list) respetando los límites de WhatsApp.
+        Muestra primero una sección de ACCIONES (incluye Filtrar categoría)
+        y luego una sección con los productos de la página actual.
         """
         productos = self._obtener_menu_actual()
 
-        rows: List[Dict[str, Any]] = []
+        rows_productos: List[Dict[str, Any]] = []
 
-        # Filas de productos
+        # --------- FILAS DE PRODUCTOS --------- #
         for producto in productos:
-            rows.append({
+            # Título: nombre recortado (máx 24 chars)
+            titulo = producto["nombre"]
+            if len(titulo) > 24:
+                titulo = titulo[:24]
+
+            # Descripción: precio + descripción
+            descripcion = f"${producto['precio']} - {producto['descripcion']}"
+
+            rows_productos.append({
                 "id": f"producto_{producto['id']}",
-                "title": f"{producto['nombre']} - ${producto['precio']}",
-                "description": producto["descripcion"],
+                "title": titulo,
+                "description": descripcion,
             })
 
-        # Filas de navegación / acciones
+        # --------- FILAS DE ACCIONES --------- #
+        rows_acciones: List[Dict[str, Any]] = []
+
         if self.pagina_actual > 1:
-            rows.append({
+            rows_acciones.append({
                 "id": "prev_page",
                 "title": "⬅️ Página anterior",
                 "description": "Volver a la página anterior",
             })
 
-        rows.append({
+        rows_acciones.append({
             "id": "next_page",
             "title": "➡️ Siguiente página",
             "description": "Ver más productos",
         })
 
-        # Opcionales (los nombres matchean con lo que usás en main.py)
-        rows.append({
-            "id": "ordenar",
-            "title": "↕️ Ordenar por precio",
-            "description": "Alternar entre más barato y más caro",
+        # 🔎 ESTA ES LA QUE QUERÉS VER
+        rows_acciones.append({
+            "id": "filtrar_categoria",
+            "title": "🔎 Filtrar categoría",
+            "description": "Elegir una categoría de productos",
         })
-        rows.append({
+
+        rows_acciones.append({
+            "id": "ordenar",
+            "title": "↕️ Ordenar precio",
+            "description": "Alternar entre barato y caro",
+        })
+
+        rows_acciones.append({
             "id": "go_first_page",
             "title": "⏮ Volver al inicio",
             "description": "Ir a la primera página del menú",
         })
-        # Si después querés filtrar por categoría, podés usar "filtrar_categoria"
+
+        # OJO: máximo 10 filas entre todas las secciones
+        # Primera página: 4 acciones + 5 productos = 9 (OK)
+        # Página >1: 5 acciones + 5 productos = 10 (OK)
 
         mensaje_interactivo: Dict[str, Any] = {
             "type": "list",
@@ -114,14 +135,19 @@ class Chat:
                 "button": "Ver opciones",
                 "sections": [
                     {
+                        "title": "Acciones",
+                        "rows": rows_acciones,
+                    },
+                    {
                         "title": "Productos disponibles",
-                        "rows": rows,
-                    }
+                        "rows": rows_productos,
+                    },
                 ],
             },
         }
 
         return mensaje_interactivo
+
     
     
    #---------- MENÚ DE CATEGORÍAS ---------- #
@@ -220,6 +246,5 @@ class Chat:
                 self.categoria_actual = categoria
             self.pagina_actual = 1
             return self.generar_mensaje_menu()
-
         # Cualquier otra cosa: devolvemos el menú actual
         return self.generar_mensaje_menu()

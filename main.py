@@ -141,7 +141,6 @@ async def received_message(request: Request):
             }
             await send_to_whatsapp(payload)
         else:
-            # Primer mensaje o texto cualquiera → mostrar menú inicial
             await send_menu(number, name)
 
         return "EVENT_RECEIVED"

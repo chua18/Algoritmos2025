@@ -154,7 +154,7 @@ async def received_message(request: Request):
 
         # 2) ¿Es un comando para RESETEAR el menú?
         if texto_normalizado in ("/reset", "/inicio", "menu"):
-            chat.reset_estado_menu()
+            chat.reset_estado()
             await send_menu(number, name)
             return "EVENT_RECEIVED"
 

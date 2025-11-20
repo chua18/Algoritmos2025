@@ -74,6 +74,16 @@ async def send_menu(to: str, nombre: str = "Cliente") -> None:
     await send_to_whatsapp(payload)
 
 
+async def send_text(to: str, body: str) -> None:
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": {"body": body},
+    }
+    await send_to_whatsapp(payload)
+
+
 # --------------------------------------------------------
 # ENDPOINTS
 # --------------------------------------------------------
@@ -126,12 +136,31 @@ async def received_message(request: Request):
 
         print(f"Mensaje recibido de {number}: {content} (tipo: {type_message})")
 
-        # Normalizamos el texto para comparar comandos tipo /reset
+        # Normalizamos el texto para comandos
         texto_normalizado = ""
         if isinstance(content, str):
             texto_normalizado = content.strip().lower()
 
-        # 1) ¿Es una acción del MENÚ (botones/listas)?
+        # 1) ¿Seleccionó un PRODUCTO del menú? (row id: 'producto_X')
+        es_producto = isinstance(content, str) and content.startswith("producto_")
+
+        if es_producto:
+            try:
+                item, total = chat.agregar_producto_al_carrito(number, content)
+                mensaje = (
+                    f"✅ *{item.nombre}* agregado al carrito (${item.precio}).\n"
+                    f"💵 Total actual: ${total}\n\n"
+                    "Escribí *carrito* para ver todo lo que llevás."
+                )
+            except ValueError:
+                mensaje = "❌ No pude identificar ese producto. Probá de nuevo."
+
+            await send_text(number, mensaje)
+            # Opcional: volver a mostrar el menú actual (manteniendo filtro/página)
+            await send_menu(number, name)
+            return "EVENT_RECEIVED"
+
+        # 2) ¿Es una acción del MENÚ (paginado / filtros / categorías)?
         es_accion_menu = (
             isinstance(content, str)
             and (
@@ -141,7 +170,6 @@ async def received_message(request: Request):
         )
 
         if es_accion_menu:
-            # Acciones del menú (paginado, filtros, etc.)
             nuevo_mensaje = chat.manejar_accion(content)
             payload = {
                 "messaging_product": "whatsapp",
@@ -152,15 +180,27 @@ async def received_message(request: Request):
             await send_to_whatsapp(payload)
             return "EVENT_RECEIVED"
 
-        # 2) ¿Es un comando para RESETEAR el menú?
-           # 👇 AQUÍ es donde usamos /reset
+        # 3) COMANDOS DE TEXTO: reset, ver carrito, vaciar carrito
+
+        # Reset de menú (sin tocar carrito)
         if texto_normalizado in ("/reset", "/inicio", "menu"):
-            chat.reset_estado()          # 👈 el nombre tiene que matchear
+            chat.reset_estado()
             await send_menu(number, name)
             return "EVENT_RECEIVED"
 
-        # 3) Cualquier otro texto (por ahora) → mostrar menú
-        #    Más adelante acá vas a meter la lógica de carrito
+        # Ver carrito
+        if texto_normalizado in ("carrito", "/carrito"):
+            resumen = chat.resumen_carrito(number)
+            await send_text(number, resumen)
+            return "EVENT_RECEIVED"
+
+        # Vaciar carrito
+        if texto_normalizado in ("borrar", "vaciar", "/borrar"):
+            chat.vaciar_carrito(number)
+            await send_text(number, "🧺 Carrito vaciado.")
+            return "EVENT_RECEIVED"
+
+        # 4) Cualquier otro texto (por ahora) → mostrar menú
         await send_menu(number, name)
         return "EVENT_RECEIVED"
 

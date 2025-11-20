@@ -1,5 +1,6 @@
 # Dominio/Chat.py
 from dataclasses import dataclass, field
+import logging
 from typing import Any, Dict, List, Optional
 
 from Menu import menuCompleto  # <-- tu menú de productos
@@ -41,6 +42,18 @@ class Chat:
         # Si más adelante querés, aquí podrías guardar pedidos por teléfono, etc.
         self.pedidos: Dict[str, Pedido] = {}
 
+    def reset_estado(self) -> None:
+        """
+        Deja el menú en estado 'limpio':
+        - Página 1
+        - Sin categoría filtrada
+        - Sin orden especial por precio
+        (NO toca el carrito ni pedidos).
+        """
+        self.pagina_actual = 1
+        self.categoria_actual = None
+        self.orden_por_precio = None
+        logging.info(">>> RESET de estado de menú (pagina=1, sin categoria, sin orden)")
     # ----------------- MENÚ PAGINADO ----------------- #
 
     def _obtener_menu_actual(self) -> List[Dict[str, Any]]:
@@ -245,12 +258,6 @@ class Chat:
     # ----------------- ACCIONES ----------------- #
 
     def manejar_accion(self, accion_id: str) -> Dict[str, Any]:
-        """
-        Maneja IDs como:
-        - 'next_page', 'prev_page', 'go_first_page', 'ordenar'
-        - 'filtrar_categoria'
-        - 'categoria_<Nombre>'
-        """
         # Navegación entre páginas
         if accion_id == "next_page":
             self.pagina_actual += 1
@@ -286,4 +293,3 @@ class Chat:
 
         # Cualquier otra cosa: devolvemos el menú actual
         return self.generar_mensaje_menu()
-

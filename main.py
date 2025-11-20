@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
-# Instancia de tu Chat anterior
+# Instancia de tu Chat anteriora
 chat = Chat()
 
 # --- CREDENCIALES Y CONFIGURACIÓN ---

@@ -180,11 +180,9 @@ async def received_message(request: Request):
         if estado and estado.get("fase") == "detalles_por_unidad" and type_message == "text":
             detalle_texto = content.strip()
 
-            # Normalizamos "completa", "normal", "no" como sin detalle extra
             if detalle_texto.lower() in ("completa", "normal", "no"):
                 detalle_texto = ""
 
-            # Guardamos detalle de la unidad actual
             estado["detalles"].append(detalle_texto)
 
             cantidad_total = estado["cantidad_total"]
@@ -195,7 +193,6 @@ async def received_message(request: Request):
             nombre_prod = prod["nombre"] if prod else "el producto"
 
             if indice_actual <= cantidad_total:
-                # Falta preguntar por más unidades
                 await send_text(
                     number,
                     f"📝 Para la unidad {indice_actual} de *{nombre_prod}*, "
@@ -205,14 +202,11 @@ async def received_message(request: Request):
 
             # Ya tenemos todos los detalles → agrupamos por tipo de detalle
             from collections import Counter
-            from Dominio.Modelos import ItemCarrito  # ajustá el import al archivo donde esté
-
             detalles = estado["detalles"]  # lista de strings ("" para completas)
             contador = Counter(detalles)
 
-            # Para cada tipo de detalle, agregamos un ItemCarrito con esa cantidad
             total = None
-            items_creados: List[ItemCarrito] = []
+            items_creados = []
 
             for detalle_valor, cant in contador.items():
                 item, total = chat.agregar_producto_al_carrito(
@@ -223,10 +217,8 @@ async def received_message(request: Request):
                 )
                 items_creados.append(item)
 
-            # Limpiamos el estado temporal
             del estado_usuarios[number]
 
-            # Armamos un resumen para este producto
             lineas = []
             nombre_base = items_creados[0].nombre if items_creados else "Producto"
             cantidad_total = sum(it.cantidad for it in items_creados)
@@ -244,9 +236,9 @@ async def received_message(request: Request):
             lineas.append("\nEscribí *carrito* para ver todo lo que llevás.")
 
             await send_text(number, "\n".join(lineas))
-            # Opcional: volver a mostrar el menú
             await send_menu(number, name)
             return "EVENT_RECEIVED"
+
 
         # ==========================
         # 1) SELECCIÓN DE PRODUCTO (LISTA)

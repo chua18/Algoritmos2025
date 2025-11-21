@@ -14,6 +14,7 @@ class ItemCarrito:
 class Pedido:
     telefono_cliente: str
     ubicacion: Optional[Tuple[float, float]] = None
+    direccion_texto: Optional[str] = None  # NUEVO
     items: List[ItemCarrito] = field(default_factory=list)
 
     @property

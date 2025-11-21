@@ -402,3 +402,15 @@ class Chat:
         if pedido:
             pedido.items.clear()
             logging.info(f"[CARRITO] Tel={telefono} vació su carrito.")
+
+    def guardar_ubicacion(self, telefono: str, lat: float, lng: float) -> None:
+        pedido = self.pedidos.get(telefono)
+        if not pedido:
+            return
+        pedido.ubicacion = (lat, lng)
+
+    def guardar_direccion_texto(self, telefono: str, direccion: str) -> None:
+        pedido = self.pedidos.get(telefono)
+        if not pedido:
+            return
+        pedido.direccion_texto = direccion

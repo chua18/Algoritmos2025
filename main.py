@@ -84,6 +84,42 @@ async def send_text(to: str, body: str) -> None:
     }
     await send_to_whatsapp(payload)
 
+async def send_botones_siguiente_paso(to: str) -> None:
+    """
+    Envía botones para que el usuario elija si quiere seguir comprando
+    o finalizar el pedido.
+    """
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {
+                "text": "¿Qué querés hacer ahora?",
+            },
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": "seguir_comprando",
+                            "title": "🛒 Seguir comprando",
+                        },
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": "finalizar_pedido",
+                            "title": "✅ Finalizar pedido",
+                        },
+                    },
+                ]
+            },
+        },
+    }
+    await send_to_whatsapp(payload)
+
 
 # --------------------------------------------------------
 # ENDPOINTS
@@ -176,34 +212,38 @@ async def received_message(request: Request):
             )
             return "EVENT_RECEIVED"
 
-        # FASE: pedir detalle por cada unidad
+                # FASE: pedir detalle por cada unidad (después de que ya mandaste la cantidad)
         if estado and estado.get("fase") == "detalles_por_unidad" and type_message == "text":
             detalle_texto = content.strip()
 
+            # Normalizamos "completa", "normal", "no" como sin detalle extra
             if detalle_texto.lower() in ("completa", "normal", "no"):
                 detalle_texto = ""
 
-            estado["detalles"].append(detalle_texto)
+            # Guardamos detalle de esta unidad
+            detalles = estado["detalles"]
+            detalles.append(detalle_texto)
 
             cantidad_total = estado["cantidad_total"]
-            indice_actual = estado["indice_actual"] + 1
-            estado["indice_actual"] = indice_actual
+            ya_tengo = len(detalles)
 
             prod = chat._buscar_producto_por_row_id(estado["row_id"])
             nombre_prod = prod["nombre"] if prod else "el producto"
 
-            if indice_actual <= cantidad_total:
+            # ¿Todavía faltan unidades por preguntar?
+            if ya_tengo < cantidad_total:
+                siguiente_n = ya_tengo + 1
                 await send_text(
                     number,
-                    f"📝 Para la unidad {indice_actual} de *{nombre_prod}*, "
+                    f"📝 Para la unidad {siguiente_n} de *{nombre_prod}*, "
                     "¿la querés *completa* o con alguna modificación?"
                 )
                 return "EVENT_RECEIVED"
 
-            # Ya tenemos todos los detalles → agrupamos por tipo de detalle
+            # 👇 Si llegamos acá, ya tenemos detalle para TODAS las unidades
             from collections import Counter
-            detalles = estado["detalles"]  # lista de strings ("" para completas)
-            contador = Counter(detalles)
+
+            contador = Counter(detalles)  # "" = completas
 
             total = None
             items_creados = []
@@ -217,15 +257,17 @@ async def received_message(request: Request):
                 )
                 items_creados.append(item)
 
+            # Limpiamos el estado temporal del usuario
             del estado_usuarios[number]
 
+            # Armamos el resumen SOLO para este producto añadido
             lineas = []
             nombre_base = items_creados[0].nombre if items_creados else "Producto"
             cantidad_total = sum(it.cantidad for it in items_creados)
             lineas.append(f"✅ *{nombre_base}* x{cantidad_total} agregado al carrito:")
 
             for it in items_creados:
-                if it.detalle:
+                if getattr(it, "detalle", ""):
                     lineas.append(f"   - x{it.cantidad} ({it.detalle})")
                 else:
                     lineas.append(f"   - x{it.cantidad} completas")
@@ -233,11 +275,52 @@ async def received_message(request: Request):
             if total is not None:
                 lineas.append(f"\n💵 Total actual (con descuentos aplicados): ${total}")
 
-            lineas.append("\nEscribí *carrito* para ver todo lo que llevás.")
-
             await send_text(number, "\n".join(lineas))
-            await send_menu(number, name)
+
+            # 👇 después del resumen mostramos botones de siguiente paso
+            await send_botones_siguiente_paso(number)
             return "EVENT_RECEIVED"
+        
+                # ==========================
+        # FASE: esperando ubicación luego de finalizar pedido
+        # ==========================
+        if estado and estado.get("fase") == "esperando_ubicacion":
+            # Si mandó ubicación nativa de WhatsApp
+            if message.get("type") == "location":
+                loc = message["location"]
+                lat = loc.get("latitude")
+                lng = loc.get("longitude")
+                chat.guardar_ubicacion(number, lat, lng)
+                estado_usuarios.pop(number, None)
+
+                await send_text(
+                    number,
+                    "📍 ¡Gracias! Ya registramos tu ubicación.\n"
+                    "Tu pedido está en preparación. 🙌"
+                )
+                return "EVENT_RECEIVED"
+
+            # Si mandó texto, lo tomamos como dirección escrita
+            if type_message == "text":
+                direccion = content.strip()
+                chat.guardar_direccion_texto(number, direccion)
+                estado_usuarios.pop(number, None)
+
+                await send_text(
+                    number,
+                    "✅ Dirección recibida.\n"
+                    "Tu pedido está en preparación. 🙌"
+                )
+                return "EVENT_RECEIVED"
+
+            # Cualquier otra cosa: le recordamos qué tiene que mandar
+            await send_text(
+                number,
+                "Por favor enviá tu ubicación (clip ➜ Ubicación) "
+                "o escribí tu dirección exacta en un mensaje."
+            )
+            return "EVENT_RECEIVED"
+
 
 
         # ==========================
@@ -315,19 +398,21 @@ async def received_message(request: Request):
             if not pedido or not pedido.items:
                 await send_text(
                     number,
-                    "🧺 Tu carrito está vacío, todavía no puedo confirmar nada.\n"
+                    "🧺 Tu carrito está vacío, todavía no puedo finalizar el pedido.\n"
                     "Elegí algún producto del menú primero."
                 )
                 return "EVENT_RECEIVED"
 
             resumen = chat.resumen_carrito(number)
-
             await send_text(
                 number,
-                resumen
-                + "\n\n✅ *Pedido confirmado.*\n"
-                  "En la siguiente etapa te voy a pedir tu ubicación para calcular el envío."
+                resumen + "\n\n📍 Ahora enviame tu ubicación (clip ➜ Ubicación)\n"
+                "o escribí tu dirección exacta."
             )
+
+            estado_usuarios[number] = {"fase": "esperando_ubicacion"}
+            return "EVENT_RECEIVED"
+
         # ==========================
         # 4) CUALQUIER OTRO TEXTO → MOSTRAR MENÚ
         # ==========================

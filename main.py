@@ -212,7 +212,7 @@ async def received_message(request: Request):
             )
             return "EVENT_RECEIVED"
 
-                # FASE: pedir detalle por cada unidad (después de que ya mandaste la cantidad)
+              # FASE: pedir detalle por cada unidad (después de que ya mandaste la cantidad)
         if estado and estado.get("fase") == "detalles_por_unidad" and type_message == "text":
             detalle_texto = content.strip()
 
@@ -245,42 +245,25 @@ async def received_message(request: Request):
 
             contador = Counter(detalles)  # "" = completas
 
-            total = None
-            items_creados = []
-
+            # Primero impactamos TODO en el carrito
             for detalle_valor, cant in contador.items():
-                item, total = chat.agregar_producto_al_carrito(
+                chat.agregar_producto_al_carrito(
                     telefono=number,
                     row_id=estado["row_id"],
                     cantidad=cant,
                     detalle=detalle_valor,
                 )
-                items_creados.append(item)
 
             # Limpiamos el estado temporal del usuario
             del estado_usuarios[number]
 
-            # Armamos el resumen SOLO para este producto añadido
-            lineas = []
-            nombre_base = items_creados[0].nombre if items_creados else "Producto"
-            cantidad_total = sum(it.cantidad for it in items_creados)
-            lineas.append(f"✅ *{nombre_base}* x{cantidad_total} agregado al carrito:")
-
-            for it in items_creados:
-                if getattr(it, "detalle", ""):
-                    lineas.append(f"   - x{it.cantidad} ({it.detalle})")
-                else:
-                    lineas.append(f"   - x{it.cantidad} completas")
-
-            if total is not None:
-                lineas.append(f"\n💵 Total actual (con descuentos aplicados): ${total}")
-
-            await send_text(number, "\n".join(lineas))
+            # Ahora usamos SIEMPRE el resumen del carrito final
+            resumen = chat.resumen_carrito(number)
+            await send_text(number, resumen)
 
             # 👇 después del resumen mostramos botones de siguiente paso
             await send_botones_siguiente_paso(number)
             return "EVENT_RECEIVED"
-        
                 # ==========================
         # FASE: esperando ubicación luego de finalizar pedido
         # ==========================
@@ -391,7 +374,7 @@ async def received_message(request: Request):
             )
             return "EVENT_RECEIVED"
 
-         # ✅ CONFIRMAR PEDIDO
+        # ✅ CONFIRMAR PEDIDO
         if texto_normalizado in ("confirmar", "/confirmar"):
             pedido = chat.pedidos.get(number)
 

@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from Menu import menuCompleto  # tu menú completo de productos
-from Dominio.Pedidos import Pedido, ItemCarrito  # modelos de dominio (carrito/pedido)
+from Dominio.Modelos import Pedido, ItemCarrito, UnidadCarrito
 
 PAGE_SIZE = 5
 
@@ -312,37 +312,37 @@ class Chat:
         self,
         telefono: str,
         row_id: str,
-        cantidad: int = 1,
-        detalle: str = "",
+        cantidad: int,
+        detalle: str,
     ) -> tuple[ItemCarrito, int]:
         """
-        Agrega un producto (por row_id tipo 'producto_6') al carrito de ese teléfono.
-        Devuelve (item_agregado, total_actual_del_carrito).
+        Agrega 'cantidad' unidades de un producto (row_id tipo 'producto_6')
+        al carrito de ese teléfono, con el mismo detalle.
+        Devuelve (item_modificado, total_actual).
         """
         producto = self._buscar_producto_por_row_id(row_id)
         if not producto:
             raise ValueError(f"No se encontró producto para row_id={row_id!r}")
 
-        # 👇 Asegurate que el Pedido de Dominio/Pedidos tenga 'telefono_cliente'
         if telefono not in self.pedidos:
             self.pedidos[telefono] = Pedido(telefono_cliente=telefono)
 
         pedido = self.pedidos[telefono]
 
-        item = ItemCarrito(
+        item = pedido.obtener_item(
             id_producto=str(producto["id"]),
             nombre=producto["nombre"],
             precio=int(producto["precio"]),
-            cantidad=cantidad,
-            detalle=detalle,
         )
 
-        pedido.agregar_item(item)
+        # 👇 acá se crean las unidades individuales
+        item.agregar_unidades(detalle=detalle, cantidad=cantidad)
+
         total = pedido.total
 
         logging.info(
-            f"[CARRITO] Tel={telefono} agregó {item.nombre} x{item.cantidad} "
-            f"(${item.precio} c/u, detalle='{item.detalle}'), total={total}"
+            f"[CARRITO] Tel={telefono} agregó {cantidad}x {item.nombre} "
+            f"(detalle={detalle!r}), total={total}"
         )
 
         return item, total
@@ -350,48 +350,38 @@ class Chat:
     def resumen_carrito(self, telefono: str) -> str:
         """
         Devuelve un texto con el contenido del carrito de ese teléfono,
-        agrupando por producto y luego por detalle.
+        mostrando las unidades agrupadas por detalle.
         """
         pedido = self.pedidos.get(telefono)
         if not pedido or not pedido.items:
             return "🧺 Tu carrito está vacío por ahora."
 
-        # Agrupamos por producto
-        productos: Dict[str, Dict[str, Any]] = {}
-        for item in pedido.items:
-            key = item.id_producto
-            if key not in productos:
-                productos[key] = {
-                    "nombre": item.nombre,
-                    "precio": item.precio,
-                    "detalles": {},   # detalle -> cantidad
-                    "cantidad_total": 0,
-                }
-            prod = productos[key]
-            prod["cantidad_total"] += item.cantidad
-            detalle_clave = item.detalle or "completa"
-            prod["detalles"][detalle_clave] = prod["detalles"].get(detalle_clave, 0) + item.cantidad
+        from collections import Counter
 
         lineas: List[str] = ["🧺 *Tu carrito actual:*"]
 
-        for prod in productos.values():
-            nombre = prod["nombre"]
-            cant_total = prod["cantidad_total"]
-            lineas.append(f"\n• {nombre} x{cant_total}")
+        for idx, item in enumerate(pedido.items, start=1):
+            # Contamos cuántas unidades hay de cada detalle
+            detalles = [u.detalle for u in item.unidades]
+            contador = Counter(detalles)
 
-            # Subdetalles: "x2 completas, x1 sin panceta"
-            subpartes = []
-            for detalle, cant in prod["detalles"].items():
-                if detalle == "completa":
-                    subpartes.append(f"x{cant} completas")
+            lineas.append(f"{idx}. *{item.nombre}* x{item.cantidad}")
+
+            for detalle_valor, cant in contador.items():
+                if detalle_valor:
+                    lineas.append(f"   - x{cant} ({detalle_valor})")
                 else:
-                    subpartes.append(f"x{cant} {detalle}")
-            lineas.append("   " + ", ".join(subpartes))
+                    lineas.append(f"   - x{cant} completas")
 
-        lineas.append(f"\n💵 *Total (con descuentos):* ${pedido.total}")
+        lineas.append(f"\n💵 *Total:* ${pedido.total}")
         lineas.append("\nEscribí *confirmar* para finalizar o *borrar* para vaciar el carrito.")
-
         return "\n".join(lineas)
+
+    def vaciar_carrito(self, telefono: str) -> None:
+        pedido = self.pedidos.get(telefono)
+        if pedido:
+            pedido.vaciar()
+            logging.info(f"[CARRITO] Tel={telefono} vació su carrito.")
 
 
     def vaciar_carrito(self, telefono: str) -> None:

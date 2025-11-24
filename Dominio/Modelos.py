@@ -2,47 +2,63 @@ from dataclasses import dataclass, field
 from typing import List, Tuple, Optional
 
 @dataclass
+class UnidadCarrito:
+    """
+    Representa UNA unidad de un producto en el carrito.
+    Sólo guarda el detalle (sin panceta, sin cebolla, etc.).
+    """
+    detalle: str = ""  # "" = completa
+
+
+@dataclass
 class ItemCarrito:
+    """
+    Un producto del carrito con N unidades.
+    La cantidad NO se guarda a mano, se calcula como len(unidades).
+    """
     id_producto: str
     nombre: str
     precio: int
-    cantidad: int = 1
-    detalle: str = ""   # 👈 “sin panceta”, “completa”, etc.
+    unidades: List[UnidadCarrito] = field(default_factory=list)
+
+    @property
+    def cantidad(self) -> int:
+        return len(self.unidades)
+
+    def agregar_unidades(self, detalle: str, cantidad: int) -> None:
+        """
+        Agrega 'cantidad' unidades con el mismo detalle.
+        """
+        for _ in range(cantidad):
+            self.unidades.append(UnidadCarrito(detalle=detalle))
 
 
 @dataclass
 class Pedido:
     telefono_cliente: str
     ubicacion: Optional[Tuple[float, float]] = None
-    direccion_texto: Optional[str] = None  # NUEVO
+    direccion_texto: Optional[str] = None
     items: List[ItemCarrito] = field(default_factory=list)
 
     @property
     def total(self) -> int:
-        """
-        Total con descuento:
-        - Para cada producto (id_producto), si la suma de cantidades >= 3,
-          aplica 5% de descuento sobre el subtotal de ese producto.
-        """
-        # Agrupamos por producto
-        productos = {}  # id_producto -> {"cantidad": int, "subtotal": int}
-        for item in self.items:
-            key = item.id_producto
-            subtotal_item = item.precio * item.cantidad
-            if key not in productos:
-                productos[key] = {"cantidad": 0, "subtotal": 0}
-            productos[key]["cantidad"] += item.cantidad
-            productos[key]["subtotal"] += subtotal_item
+        return sum(item.precio * item.cantidad for item in self.items)
 
-        total = 0
-        for data in productos.values():
-            if data["cantidad"] >= 3:
-                # 5% de descuento para ese grupo
-                total += int(round(data["subtotal"] * 0.95))
-            else:
-                total += data["subtotal"]
+    def obtener_item(self, id_producto: str, nombre: str, precio: int) -> ItemCarrito:
+        """
+        Devuelve el ItemCarrito de ese producto si ya existe,
+        si no, lo crea y lo agrega a la lista.
+        """
+        for it in self.items:
+            if it.id_producto == id_producto:
+                return it
 
-        return total
+        nuevo = ItemCarrito(id_producto=id_producto, nombre=nombre, precio=precio)
+        self.items.append(nuevo)
+        return nuevo
+
+    def vaciar(self) -> None:
+        self.items.clear()
 
     def agregar_item(self, item: ItemCarrito) -> None:
         """

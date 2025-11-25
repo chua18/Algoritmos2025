@@ -349,9 +349,18 @@ async def received_message(request: Request):
             await send_to_whatsapp(payload)
             return "EVENT_RECEIVED"
 
+                # ==========================
+        # 3) COMANDOS DE TEXTO Y BOTONES
+        #    (carrito, borrar, reset, confirmar,
+        #     seguir_comprando, finalizar_pedido)
         # ==========================
-        # 3) COMANDOS DE TEXTO (carrito, borrar, reset, confirmar)
-        # ==========================
+
+        # Botón "🛒 Seguir comprando"
+        if texto_normalizado == "seguir_comprando":
+            # opcional: limpiar algún estado especial si hiciera falta
+            await send_menu(number, name)
+            return "EVENT_RECEIVED"
+
         if texto_normalizado in ("carrito", "/carrito"):
             resumen = chat.resumen_carrito(number)
             await send_text(number, resumen)
@@ -374,8 +383,8 @@ async def received_message(request: Request):
             )
             return "EVENT_RECEIVED"
 
-        # ✅ CONFIRMAR PEDIDO
-        if texto_normalizado in ("confirmar", "/confirmar"):
+        # ✅ CONFIRMAR PEDIDO (texto o botón)
+        if texto_normalizado in ("confirmar", "/confirmar", "finalizar_pedido"):
             pedido = chat.pedidos.get(number)
 
             if not pedido or not pedido.items:

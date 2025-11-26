@@ -3,23 +3,18 @@ from typing import List, Tuple, Optional
 
 @dataclass
 class UnidadCarrito:
-    """
-    Representa UNA unidad de un producto en el carrito.
-    Sólo guarda el detalle (sin panceta, sin cebolla, etc.).
-    """
+    #representa la unidad del producto en el carrito guardando su detalle
     detalle: str = ""  # "" = completa
 
 
 @dataclass
 class ItemCarrito:
-    """
-    Un producto del carrito con N unidades.
-    La cantidad NO se guarda a mano, se calcula como len(unidades).
-    """
     id_producto: str
     nombre: str
     precio: int
     unidades: List[UnidadCarrito] = field(default_factory=list)
+    #la cantidad de producto en el carrito se guarda como una lista de unidades de ese producto
+
 
     @property
     def cantidad(self) -> int:
@@ -39,6 +34,14 @@ class Pedido:
     ubicacion: Optional[Tuple[float, float]] = None
     direccion_texto: Optional[str] = None
     items: List[ItemCarrito] = field(default_factory=list)
+
+
+    # 🔽 NUEVO: datos de ruta / entrega
+    nodo_origen: Optional[int] = None
+    nodo_destino: Optional[int] = None
+    distancia_km: float = 0.0
+    tiempo_estimado_min: float = 0.0
+    path_nodos: List[int] = field(default_factory=list)
 
     @property
     def total(self) -> int:

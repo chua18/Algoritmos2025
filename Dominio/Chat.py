@@ -4,8 +4,12 @@ from typing import Any, Dict, List, Optional
 
 from Menu import menuCompleto  # tu menú completo de productos
 from Dominio.Modelos import Pedido, ItemCarrito, UnidadCarrito
+from Dominio import Rutas
 
 PAGE_SIZE = 5
+
+LAT_LOCAL = -31.387591856643436
+LON_LOCAL = -57.962891374932944
 
 
 # ------------------ HELPER DE PAGINADO ------------------ #
@@ -392,15 +396,45 @@ class Chat:
         if pedido:
             pedido.items.clear()
             logging.info(f"[CARRITO] Tel={telefono} vació su carrito.")
-
     def guardar_ubicacion(self, telefono: str, lat: float, lng: float) -> None:
+        """
+        Guarda ubicacion (lat, lng) en el Pedido y calcula ruta con A*.
+        """
         pedido = self.pedidos.get(telefono)
         if not pedido:
+            logging.warning(f"[UBICACION] No hay pedido para tel={telefono}")
             return
+
         pedido.ubicacion = (lat, lng)
 
+        try:
+            nodo_local = Rutas.coordenadas_a_nodo(LAT_LOCAL, LON_LOCAL)
+            nodo_cliente = Rutas.coordenadas_a_nodo(lat, lng)
+
+            path, dist_km, tiempo_min = Rutas.a_star_ruta(nodo_local, nodo_cliente)
+
+            pedido.nodo_origen = nodo_local
+            pedido.nodo_destino = nodo_cliente
+            pedido.distancia_km = dist_km
+            pedido.tiempo_estimado_min = tiempo_min
+            pedido.path_nodos = path
+
+            logging.info(
+                f"[RUTA] tel={telefono} dist={dist_km:.2f}km tiempo={tiempo_min:.1f}min "
+                f"nodos={len(path)}"
+            )
+        except Exception as e:
+            logging.error(f"[RUTA] Error calculando ruta para tel={telefono}: {e}")
+
     def guardar_direccion_texto(self, telefono: str, direccion: str) -> None:
+        """
+        Guarda direccion escrita por el usuario en el Pedido (por si no manda ubicación).
+        No calcula ruta porque no hay lat/lon, pero queda la dirección registrada.
+        """
         pedido = self.pedidos.get(telefono)
         if not pedido:
+            logging.warning(f"[DIRECCION] No hay pedido para tel={telefono}")
             return
+
         pedido.direccion_texto = direccion
+        logging.info(f"[DIRECCION] tel={telefono} -> {direccion!r}")

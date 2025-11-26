@@ -23,6 +23,14 @@ class Pedido:
     ubicacion: Optional[Tuple[float, float]] = None
     items: List[ItemCarrito] = field(default_factory=list)
 
+
+    # 🔽 NUEVO: datos de ruta / entrega
+    nodo_origen: Optional[int] = None
+    nodo_destino: Optional[int] = None
+    distancia_km: float = 0.0
+    tiempo_estimado_min: float = 0.0
+    path_nodos: List[int] = field(default_factory=list)
+
     @property
     def total(self) -> int:
         return sum(item.precio * item.cantidad for item in self.items)

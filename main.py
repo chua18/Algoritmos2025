@@ -264,7 +264,7 @@ async def received_message(request: Request):
             # 👇 después del resumen mostramos botones de siguiente paso
             await send_botones_siguiente_paso(number)
             return "EVENT_RECEIVED"
-            # ==========================
+        # ==========================
         # FASE: esperando ubicación luego de finalizar pedido
         # ==========================
         if estado and estado.get("fase") == "esperando_ubicacion":
@@ -358,28 +358,27 @@ async def received_message(request: Request):
             await send_to_whatsapp(payload)
             return "EVENT_RECEIVED"
 
-                # ==========================
+         # ==========================
         # 3) COMANDOS DE TEXTO Y BOTONES
         #    (carrito, borrar, reset, confirmar,
         #     seguir_comprando, finalizar_pedido)
         # ==========================
 
-        # Botón "🛒 Seguir comprando"
+        # Botón " Seguir comprando"
         if texto_normalizado == "seguir_comprando":
-            # opcional: limpiar algún estado especial si hiciera falta
             await send_menu(number, name)
             return "EVENT_RECEIVED"
-
+        #texto en chat para ver el carrito
         if texto_normalizado in ("carrito", "/carrito"):
             resumen = chat.resumen_carrito(number)
             await send_text(number, resumen)
             return "EVENT_RECEIVED"
-
+        #texto en chat para borrar, vaciar el carrito
         if texto_normalizado in ("borrar", "vaciar", "/borrar"):
             chat.vaciar_carrito(number)
             await send_text(number, "🧺 Carrito vaciado.")
             return "EVENT_RECEIVED"
-
+        #texto en chat para resetear la conversacion y carrito "cache"
         if texto_normalizado in ("/reset", "reset", "/salir", "salir"):
             # limpiamos estado de menú y carrito de ese user
             chat.reset_estado()
@@ -392,7 +391,8 @@ async def received_message(request: Request):
             )
             return "EVENT_RECEIVED"
 
-        # ✅ CONFIRMAR PEDIDO (texto o botón)
+        #texto en chat para confrimar y finalizar el pedido
+        #boton para finalizar el pedido
         if texto_normalizado in ("confirmar", "/confirmar", "finalizar_pedido"):
             pedido = chat.pedidos.get(number)
 

@@ -6,47 +6,6 @@ from Menu import menuCompleto  # usamos tu menuCompleto con 'nombre', 'precio', 
 
 PAGE_SIZE = 5
 
-# ------------------ MODELOS ------------------ #
-
-@dataclass
-class ItemCarrito:
-    id_producto: str
-    nombre: str
-    precio: int
-    cantidad: int = 1
-    detalle: str = ""
-
-
-@dataclass
-class Pedido:
-    telefono_cliente: str
-    ubicacion: Optional[Tuple[float, float]] = None
-    items: List[ItemCarrito] = field(default_factory=list)
-
-
-    # 🔽 NUEVO: datos de ruta / entrega
-    nodo_origen: Optional[int] = None
-    nodo_destino: Optional[int] = None
-    distancia_km: float = 0.0
-    tiempo_estimado_min: float = 0.0
-    path_nodos: List[int] = field(default_factory=list)
-
-    @property
-    def total(self) -> int:
-        return sum(item.precio * item.cantidad for item in self.items)
-
-    def agregar_item(self, item: ItemCarrito) -> None:
-        """
-        Si el producto ya está en el carrito, solo aumenta cantidad.
-        Si no está, lo agrega.
-        """
-        for existente in self.items:
-            if existente.id_producto == item.id_producto:
-                existente.cantidad += item.cantidad
-                return
-        self.items.append(item)
-
-
 # ------------------ LÓGICA DE MENÚ (REUTILIZABLE) ------------------ #
 
 def get_paginated_menu(page: int = 1, categoria: Optional[str] = None) -> List[Dict[str, Any]]:

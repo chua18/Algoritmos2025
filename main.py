@@ -279,11 +279,15 @@ async def received_message(request: Request):
 
                 pedido = chat.pedidos.get(number)
                 extra = ""
-                if pedido and pedido.distancia_km > 0:
-                    extra = (
-                        f"\n\n🛣 Distancia estimada: {pedido.distancia_km:.2f} km"
-                        f"\n⏱ Tiempo aprox: {pedido.tiempo_estimado_min:.1f} min"
-                    )
+                if pedido:
+                    if pedido.distancia_km > 0:
+                        extra += (
+                            f"\n\n🛣 Distancia estimada: {pedido.distancia_km:.2f} km"
+                            f"\n⏱ Tiempo aprox: {pedido.tiempo_estimado_min:.1f} min"
+                        )
+                    if pedido.zona:
+                        extra += f"\n📍 Zona de reparto: {pedido.zona}"
+
 
                 await send_text(
                     number,

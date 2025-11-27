@@ -31,6 +31,31 @@ def get_paginated_menu(page: int = 1, categoria: Optional[str] = None) -> List[D
     fin = inicio + PAGE_SIZE
     return productos[inicio:fin]
 
+def calcular_zona(lat_cliente: float, lon_cliente: float) -> str:
+    """
+    Divide el plano en 4 zonas con el local como origen:
+    - Noroeste (NO)
+    - Noreste (NE)
+    - Suroeste (SO)
+    - Sureste (SE)
+
+    OJO: estamos en hemisferio sur, las latitudes son negativas.
+    - lat_cliente > LAT_LOCAL => está más al NORTE
+    - lat_cliente < LAT_LOCAL => está más al SUR
+    - lon_cliente > LON_LOCAL => está más al ESTE
+    - lon_cliente < LON_LOCAL => está más al OESTE
+    """
+    es_norte = lat_cliente > LAT_LOCAL
+    es_este = lon_cliente > LON_LOCAL
+
+    if es_norte and not es_este:
+        return "NO"   # Noroeste
+    if es_norte and es_este:
+        return "NE"   # Noreste
+    if not es_norte and not es_este:
+        return "SO"   # Suroeste
+    return "SE"        # Sureste
+
 
 # ------------------ CLASE CHAT ------------------ #
 
@@ -388,18 +413,7 @@ class Chat:
             logging.info(f"[CARRITO] Tel={telefono} vació su carrito.")
 
 
-    def vaciar_carrito(self, telefono: str) -> None:
-        """
-        Vacía el carrito de ese teléfono.
-        """
-        pedido = self.pedidos.get(telefono)
-        if pedido:
-            pedido.items.clear()
-            logging.info(f"[CARRITO] Tel={telefono} vació su carrito.")
     def guardar_ubicacion(self, telefono: str, lat: float, lng: float) -> None:
-        """
-        Guarda ubicacion (lat, lng) en el Pedido y calcula ruta con A*.
-        """
         pedido = self.pedidos.get(telefono)
         if not pedido:
             logging.warning(f"[UBICACION] No hay pedido para tel={telefono}")
@@ -419,12 +433,17 @@ class Chat:
             pedido.tiempo_estimado_min = tiempo_min
             pedido.path_nodos = path
 
+            # 🔽 NUEVO: calcular zona
+            pedido.zona = calcular_zona(lat, lng)
+
             logging.info(
-                f"[RUTA] tel={telefono} dist={dist_km:.2f}km tiempo={tiempo_min:.1f}min "
+                f"[RUTA] tel={telefono} zona={pedido.zona} "
+                f"dist={dist_km:.2f}km tiempo={tiempo_min:.1f}min "
                 f"nodos={len(path)}"
             )
         except Exception as e:
             logging.error(f"[RUTA] Error calculando ruta para tel={telefono}: {e}")
+
 
     def guardar_direccion_texto(self, telefono: str, direccion: str) -> None:
         """

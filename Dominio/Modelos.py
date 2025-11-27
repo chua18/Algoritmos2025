@@ -35,8 +35,8 @@ class Pedido:
     direccion_texto: Optional[str] = None
     items: List[ItemCarrito] = field(default_factory=list)
 
+    zona: Optional[str] = None  # "NO", "NE", "SO", "SE"
 
-    # 🔽 NUEVO: datos de ruta / entrega
     nodo_origen: Optional[int] = None
     nodo_destino: Optional[int] = None
     distancia_km: float = 0.0

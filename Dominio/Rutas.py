@@ -47,6 +47,21 @@ for edge in G.edges:
     # weight ≈ tiempo = longitud / velocidad
     G.edges[edge]["weight"] = G.edges[edge]["length"] / maxspeed
 
+    
+def _parse_maxspeed(raw) -> float:
+    if raw is None:
+        return 30.0
+    if isinstance(raw, (list, tuple)):
+        raw = raw[0]
+    if isinstance(raw, str):
+        digits = "".join(ch for ch in raw if ch.isdigit())
+        if digits:
+            return float(digits)
+        return 30.0
+    try:
+        return float(raw)
+    except Exception:
+        return 30.0
 
 # -----------------------------------------------------------
 # A* PARA LÓGICA (DISTANCIA / TIEMPO)
@@ -69,80 +84,44 @@ def coordenadas_a_nodo(lat: float, lon: float) -> int:
     return ox.distance.nearest_nodes(G, lon, lat)
 
 
-def a_star_ruta(orig: int, dest: int) -> Tuple[List[int], float, float]:
+def a_star_ruta(nodo_origen: int, nodo_destino: int):
     """
-    Implementación de A* para el proyecto (solo lógica).
-
-    Devuelve:
-      - path: lista de nodos (int) desde orig hasta dest
-      - distancia_km: distancia total aproximada en km
-      - tiempo_min: tiempo aproximado en minutos
+    Calcula ruta más corta por 'length' entre nodo_origen y nodo_destino.
+    Devuelve: path (lista de nodos), dist_km, tiempo_min.
     """
+    try:
+        path = nx.shortest_path(G, nodo_origen, nodo_destino, weight="length")
+    except nx.NetworkXNoPath:
+        return [nodo_origen], 0.0, 0.0
 
-    # Inicializar todos los nodos
-    for n in G.nodes:
-        G.nodes[n]["g_score"] = float("inf")   # coste desde el origen
-        G.nodes[n]["f_score"] = float("inf")   # g + heurística
-        G.nodes[n]["previous"] = None          # para reconstruir camino
+    if not path or len(path) == 1:
+        return path, 0.0, 0.0
 
-    G.nodes[orig]["g_score"] = 0.0
-    G.nodes[orig]["f_score"] = heuristica(orig, dest)
-
-    # cola de prioridad con (f_score, nodo)
-    pq: List[Tuple[float, int]] = [(G.nodes[orig]["f_score"], orig)]
-
-    while pq:
-        _, node = heapq.heappop(pq)
-
-        if node == dest:
-            # ya encontramos el mejor camino hacia dest
-            break
-
-        # recorrer vecinos
-        for u, v, k in G.out_edges(node, keys=True):
-            edge_data = G.edges[(u, v, k)]
-            w = edge_data["weight"]  # coste (tiempo aproximado)
-
-            tentative_g = G.nodes[node]["g_score"] + w
-
-            if tentative_g < G.nodes[v]["g_score"]:
-                G.nodes[v]["g_score"] = tentative_g
-                G.nodes[v]["f_score"] = tentative_g + heuristica(v, dest)
-                G.nodes[v]["previous"] = node
-                heapq.heappush(pq, (G.nodes[v]["f_score"], v))
-
-    # Reconstruir camino
-    if G.nodes[dest]["previous"] is None and dest != orig:
-        # no se encontró camino válido
-        return [], 0.0, 0.0
-
-    path: List[int] = []
-    curr = dest
     dist_m = 0.0
     speeds = []
 
-    while curr != orig:
-        prev = G.nodes[curr]["previous"]
-        path.append(curr)
+    for u, v in zip(path, path[1:]):
+        edge_data = G.get_edge_data(u, v)
+        if not edge_data:
+            continue
 
-        edge_data = G.get_edge_data(prev, curr)
-        if edge_data:
-            # get_edge_data devuelve dict de claves (keys) → tomamos la primera
-            e0 = list(edge_data.values())[0]
-            dist_m += e0["length"]
-            speeds.append(e0["maxspeed"])
+        e0 = list(edge_data.values())[0]
+        length = float(e0.get("length", 0.0))
+        maxspeed = _parse_maxspeed(e0.get("maxspeed", 30.0))
 
-        curr = prev
-
-    path.append(orig)
-    path.reverse()
+        dist_m += length
+        speeds.append(maxspeed)
 
     dist_km = dist_m / 1000.0
-    vel_prom = (sum(speeds) / len(speeds)) if speeds else 30.0
-    tiempo_min = dist_km / vel_prom * 60.0
+
+    if speeds:
+        vel_prom = sum(speeds) / len(speeds)
+        tiempo_min = dist_km / vel_prom * 60.0
+    else:
+        vel_prom = 30.0
+        tiempo_min = dist_km / vel_prom * 60.0 if dist_km > 0 else 0.0
 
     return path, dist_km, tiempo_min
-
 
 # -----------------------------------------------------------
 # GIF PARA LOTE DE PEDIDOS (USANDO coordenadas_gifs)
@@ -197,8 +176,9 @@ def generar_gif_ruta_lote(pedidos: List[Pedido]) -> Optional[str]:
     if not hay_algo:
         return None
 
-    png_path = create_gif("pathfinding_lote_reparto_salto.gif")
+    gif_path, png_path = create_gif("pathfinding_lote_reparto_salto.gif")
 
-# Podés decidir qué querés devolver
-# Para WhatsApp nos interesa el PNG
+    if not png_path:
+        return None
+
     return png_path

@@ -413,8 +413,8 @@ class Chat:
             logging.info(f"[CARRITO] Tel={telefono} vació su carrito.")
 
 
-    def guardar_ubicacion(self, telefono: str, lat: float, lng: float) -> None:
-        pedido = self.pedidos.get(telefono)
+    def guardar_ubicacion(self, telefono: str, lat: float, lng: float, direccion: str):
+        pedido = self.obtener_o_crear_pedido(telefono)
         if not pedido:
             logging.warning(f"[UBICACION] No hay pedido para tel={telefono}")
             return
@@ -422,11 +422,13 @@ class Chat:
         pedido.ubicacion = (lat, lng)
 
         try:
-            nodo_local = Rutas.coordenadas_a_nodo(LAT_LOCAL, LON_LOCAL)
-            nodo_cliente = Rutas.coordenadas_a_nodo(lat, lng)
+            nodo_local = Rutas.NODO_LOCAL
+            nodo_cliente = Rutas.get_nodo_mas_cercano(lat, lng)
 
             path, dist_km, tiempo_min = Rutas.a_star_ruta(nodo_local, nodo_cliente)
 
+            pedido.ubicacion = (lat, lng)
+            pedido.direccion_texto = direccion
             pedido.nodo_origen = nodo_local
             pedido.nodo_destino = nodo_cliente
             pedido.distancia_km = dist_km
@@ -438,8 +440,7 @@ class Chat:
 
             logging.info(
                 f"[RUTA] tel={telefono} zona={pedido.zona} "
-                f"dist={dist_km:.2f}km tiempo={tiempo_min:.1f}min "
-                f"nodos={len(path)}"
+                f"dist={dist_km:.2f}km tiempo={tiempo_min:.1f}min nodos={len(path)}"
             )
         except Exception as e:
             logging.error(f"[RUTA] Error calculando ruta para tel={telefono}: {e}")

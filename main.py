@@ -9,7 +9,7 @@ from fastapi.responses import PlainTextResponse
 from Dominio.Chat import Chat
 from Dominio.Reparto import GestorReparto
 from Dominio import Rutas
-from Dominio.Modelos import Pedido
+from Dominio.Modelos import Pedido, Cliente
 from utils.get_message_type import get_message_type
 
 # -----------------------------------
@@ -22,7 +22,9 @@ app = FastAPI()
 # Instancia de tu Chat anteriora
 chat = Chat()
 
+clientes: Dict[str, Cliente] = {}
 
+estado_usuarios: Dict[str, Dict[str, Any]] = {}
 
 # --- CREDENCIALES Y CONFIGURACIÓN ---
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")
@@ -36,19 +38,32 @@ logging.info(f"ACCESS_TOKEN cargado? {bool(ACCESS_TOKEN)}")
 logging.info(f"PHONE_NUMBER_ID: {PHONE_NUMBER_ID!r}")
 logging.info(f"GRAPH_SEND_URL: {GRAPH_SEND_URL}")
 
-REPARTIDORES_PHONE = {
+CELULAR_REPARTIDOR = {
     "NO": os.getenv("REPARTIDOR_NO", "59891307359"),
     "NE": os.getenv("REPARTIDOR_NE", "59896964635"),
     "SO": os.getenv("REPARTIDOR_SO", "59891466197"),
     "SE": os.getenv("REPARTIDOR_SE", "59892239294"),
 }
 
-gestor_reparto = GestorReparto.desde_config(REPARTIDORES_PHONE)
+gestor_reparto = GestorReparto.desde_config(CELULAR_REPARTIDOR)
 
-
-
-estado_usuarios: Dict[str, Dict[str, Any]] = {}
-
+def cliente_to_dict(cliente: Cliente) -> Dict[str, Any]:
+    """
+    Convierte un Cliente en un diccionario simple para JSON.
+    """
+    return {
+        "telefono": cliente.telefono,
+        "nombre": cliente.nombre,
+        "cantidad_pedidos": len(cliente.pedidos),
+        "pedidos": [
+            {
+                "total": p.total,
+                "zona": getattr(p, "zona", None),
+                "direccion": p.direccion_texto,
+            }
+            for p in cliente.pedidos
+        ],
+    }
 
 
 def pedido_to_dict(pedido: Pedido) -> Dict[str, Any]:
@@ -266,18 +281,15 @@ async def enviar_lote_zona_al_repartidor(zona: str) -> None:
 
 
 async def intentar_cerrar_lote(telefono: str) -> None:
-    """
-    Asigna el pedido de este teléfono al gestor de reparto.
-    Si con este pedido se llena el lote (7 pedidos) de su zona,
-    genera la imagen y la envía al repartidor de ESA zona.
-
-    IMPORTANTE: una vez que pasa al gestor de reparto,
-    lo sacamos de los pedidos activos del chat.
-    """
     pedido = chat.pedidos.get(telefono)
     if not pedido:
         logging.warning(f"[LOTE] No hay pedido activo para tel={telefono}")
         return
+
+    # Vinculamos el pedido al cliente (si existe)
+    cliente = clientes.get(telefono)
+    if cliente and pedido not in cliente.pedidos:
+        cliente.pedidos.append(pedido)
 
     lote_lleno, zona = gestor_reparto.asignar_pedido(pedido)
 
@@ -336,6 +348,13 @@ async def received_message(request: Request):
 
         contacts = value.get("contacts", [])
         name = contacts[0].get("profile", {}).get("name", "Cliente") if contacts else "Cliente"
+
+        if number not in clientes:
+            clientes[number] = Cliente(
+                telefono=number,
+                nombre=name,
+            )
+            logging.info(f"[CLIENTE] Nuevo cliente registrado: {name} ({number})")
 
         print(f"Mensaje recibido de {number}: {content} (tipo: {type_message})")
 
@@ -639,6 +658,21 @@ async def received_message(request: Request):
         print("Error en /whatsapp:", e)
         # Siempre devolver EVENT_RECEIVED para que Meta no reintente infinitamente
         return "EVENT_RECEIVED"
+
+
+@app.get("/clientesnuevos")
+def clientes_nuevos():
+    """
+    Devuelve todos los clientes registrados por el bot
+    desde que la aplicación se inició.
+    """
+    lista_clientes = [cliente_to_dict(c) for c in clientes.values()]
+
+    return {
+        "cantidad_clientes": len(lista_clientes),
+        "clientes": lista_clientes,
+    }
+
 
 @app.get("/pedidosporrepartidor")
 def pedidos_por_repartidor():

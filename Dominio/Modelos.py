@@ -1,6 +1,16 @@
 from dataclasses import dataclass, field
 from typing import List, Tuple, Optional
 
+
+@dataclass
+class Cliente:
+    """
+    Representa un cliente del sistema.
+    """
+    telefono: str
+    nombre: str
+    pedidos: List["Pedido"] = field(default_factory=list)
+    
 @dataclass
 class UnidadCarrito:
     #representa la unidad del producto en el carrito guardando su detalle

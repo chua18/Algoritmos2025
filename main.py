@@ -32,8 +32,8 @@ estado_usuarios: Dict[str, Dict[str, Any]] = {}
 CELULAR_REPARTIDOR = {
     "NO": os.getenv("REPARTIDOR_NO", "59891307359"),
     "NE": os.getenv("REPARTIDOR_NE", "59896964635"),
-    "SO": os.getenv("REPARTIDOR_SO", "59891466197"),
-    "SE": os.getenv("REPARTIDOR_SE", "59892239294"),
+    "SO": os.getenv("REPARTIDOR_SO", "59896964635"),
+    "SE": os.getenv("REPARTIDOR_SE", "59891307359"),
 }
 
 gestor_reparto = GestorReparto.desde_config(CELULAR_REPARTIDOR)

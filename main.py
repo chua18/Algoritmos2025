@@ -7,6 +7,9 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import PlainTextResponse
 
 from Dominio.Chat import Chat
+from Dominio.Reparto import GestorReparto
+from Dominio import Rutas
+from Dominio.Modelos import Pedido
 from utils.get_message_type import get_message_type
 
 # -----------------------------------
@@ -18,6 +21,9 @@ app = FastAPI()
 
 # Instancia de tu Chat anteriora
 chat = Chat()
+gestor_reparto = GestorReparto()
+
+REPARTIDOR_PHONE = "59896964635"
 
 # --- CREDENCIALES Y CONFIGURACIÓN ---
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")
@@ -119,6 +125,111 @@ async def send_botones_siguiente_paso(to: str) -> None:
         },
     }
     await send_to_whatsapp(payload)
+    
+async def upload_media(file_path: str, mime_type: str = "image/gif") -> str:
+    """
+    Sube un archivo a la API de WhatsApp y devuelve el media_id.
+    """
+    if not ACCESS_TOKEN or not PHONE_NUMBER_ID:
+        logging.warning("No hay ACCESS_TOKEN o PHONE_NUMBER_ID para subir media.")
+        return ""
+
+    url = f"https://graph.facebook.com/{VERSION}/{PHONE_NUMBER_ID}/media"
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        with open(file_path, "rb") as f:
+            files = {
+                "file": (os.path.basename(file_path), f, mime_type),
+            }
+            data = {
+                "messaging_product": "whatsapp",
+            }
+            headers = {
+                "Authorization": f"Bearer {ACCESS_TOKEN}",
+            }
+            resp = await client.post(url, data=data, files=files, headers=headers)
+
+        logging.info(f"Subida de media: {resp.status_code} {resp.text}")
+        resp.raise_for_status()
+        media_id = resp.json().get("id", "")
+        return media_id
+
+
+async def enviar_lote_actual_al_repartidor() -> None:
+    """
+    Toma el lote_actual del gestor, genera un GIF con la ruta de todos
+    los pedidos, y lo envía al repartidor con un resumen de cada pedido.
+    Luego marca el lote como enviado (y carga el siguiente si hay cola).
+    """
+    if not REPARTIDOR_PHONE:
+        logging.warning("REPARTIDOR_PHONE no configurado.")
+        return
+
+    telefonos_lote = gestor_reparto.obtener_lote_actual()
+    if not telefonos_lote:
+        logging.info("No hay pedidos en el lote actual.")
+        return
+
+    pedidos_lote: List[Pedido] = []
+    for tel in telefonos_lote:
+        p = chat.pedidos.get(tel)
+        if p:
+            pedidos_lote.append(p)
+
+    if not pedidos_lote:
+        logging.info("No se encontraron pedidos válidos para el lote.")
+        return
+
+    # 1) Generar GIF para el lote
+    gif_path = Rutas.generar_gif_ruta_lote(pedidos_lote)
+    if not gif_path:
+        logging.warning("No se pudo generar el GIF del lote.")
+        return
+
+    # 2) Subir GIF
+    media_id = await upload_media(gif_path)
+    if not media_id:
+        logging.warning("No se pudo subir el GIF a WhatsApp.")
+        return
+
+    # 3) Armar resumen para el repartidor
+    lineas: List[str] = []
+    lineas.append("🛵 *Nuevo lote de pedidos (hasta 7)*")
+
+    for idx, p in enumerate(pedidos_lote, start=1):
+        if p.direccion_texto:
+            direccion = p.direccion_texto
+        elif p.ubicacion:
+            lat, lng = p.ubicacion
+            direccion = f"{lat:.5f}, {lng:.5f}"
+        else:
+            direccion = "Sin dirección"
+
+        lineas.append(f"\n#{idx} 📱 {p.telefono_cliente}")
+        lineas.append(f"📍 {direccion}")
+        if getattr(p, "zona", None):
+            lineas.append(f"🗺 Zona: {p.zona}")
+        lineas.append(f"💵 Total: ${p.total}")
+
+    caption = "\n".join(lineas)
+    if len(caption) > 1024:
+        caption = caption[:1020] + "..."
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": REPARTIDOR_PHONE,
+        "type": "image",
+        "image": {
+            "id": media_id,
+            "caption": caption,
+        },
+    }
+
+    await send_to_whatsapp(payload)
+    logging.info("GIF del lote enviado al repartidor.")
+
+    # 4) Marcar lote como enviado y preparar el siguiente
+    gestor_reparto.marcar_lote_enviado()
 
 
 # --------------------------------------------------------
@@ -264,8 +375,8 @@ async def received_message(request: Request):
             # 👇 después del resumen mostramos botones de siguiente paso
             await send_botones_siguiente_paso(number)
             return "EVENT_RECEIVED"
-        # ==========================
-        # FASE: esperando ubicación luego de finalizar pedido
+       # ==========================
+        # FASE: esperando ubicación luego de confirmar pedido
         # ==========================
         if estado and estado.get("fase") == "esperando_ubicacion":
             # 1) Si mandó ubicación nativa de WhatsApp
@@ -274,26 +385,34 @@ async def received_message(request: Request):
                 lat = loc.get("latitude")
                 lng = loc.get("longitude")
 
+                # Guardamos ubicación y calculamos distancia/tiempo/zona dentro de Chat
                 chat.guardar_ubicacion(number, lat, lng)
                 estado_usuarios.pop(number, None)
 
                 pedido = chat.pedidos.get(number)
                 extra = ""
                 if pedido:
-                    if pedido.distancia_km > 0:
+                    if getattr(pedido, "distancia_km", 0) > 0:
                         extra += (
                             f"\n\n🛣 Distancia estimada: {pedido.distancia_km:.2f} km"
                             f"\n⏱ Tiempo aprox: {pedido.tiempo_estimado_min:.1f} min"
                         )
-                    if pedido.zona:
+                    if getattr(pedido, "zona", None):
                         extra += f"\n📍 Zona de reparto: {pedido.zona}"
-
 
                 await send_text(
                     number,
                     "📍 ¡Gracias! Ya registramos tu ubicación.\n"
                     "Tu pedido está en preparación. 🙌" + extra
                 )
+
+                # 👉 NUEVO: asignamos este pedido al lote de reparto
+                lote_lleno = gestor_reparto.asignar_pedido(number)
+                if lote_lleno:
+                    # Si al agregar este pedido se llenó el lote (7),
+                    # generamos GIF y se lo mandamos al repartidor
+                    await enviar_lote_actual_al_repartidor()
+
                 return "EVENT_RECEIVED"
 
             # 2) Si mandó texto, lo tomamos como dirección escrita
@@ -307,6 +426,12 @@ async def received_message(request: Request):
                     "✅ Dirección recibida.\n"
                     "Tu pedido está en preparación. 🙌"
                 )
+
+                # 👉 NUEVO: también entra al lote aunque no haya ubicación GPS
+                lote_lleno = gestor_reparto.asignar_pedido(number)
+                if lote_lleno:
+                    await enviar_lote_actual_al_repartidor()
+
                 return "EVENT_RECEIVED"
 
             # 3) Cualquier otra cosa: recordamos qué tiene que mandar

@@ -1,12 +1,26 @@
 # Dominio/rutas.py
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import heapq
 
 import osmnx as ox
 import networkx as nx  # por si querés usar funciones de networkx también
 
+from Dominio.Modelos import Pedido
 
-# Cargar el grafo de Salto UNA sola vez
+# 👇 IMPORTAMOS LAS FUNCIONES DEL MÓDULO DE GIFS
+# Asegurate de que el archivo se llame exactamente `coordenadas_gifs.py`
+from Algoritmos.coordenadas_gifs import (
+    frames,
+    a_star_gif,          # algoritmo A* que pinta el grafo y llena frames
+    reconstruct_path_gif,
+    create_gif,
+)
+
+# -----------------------------------------------------------
+# GRAFO DE SALTO (una sola vez)
+# -----------------------------------------------------------
+
+# Cargar el grafo de Salto, Uruguay
 G = ox.graph_from_place("Salto, Uruguay", network_type="drive")
 
 # Configurar atributos de las aristas: maxspeed y weight (tiempo aproximado)
@@ -33,6 +47,10 @@ for edge in G.edges:
     G.edges[edge]["weight"] = G.edges[edge]["length"] / maxspeed
 
 
+# -----------------------------------------------------------
+# A* PARA LÓGICA (DISTANCIA / TIEMPO)
+# -----------------------------------------------------------
+
 def heuristica(n1: int, n2: int) -> float:
     """
     Heurística para A*: distancia euclídea entre dos nodos (en coordenadas x,y).
@@ -52,7 +70,7 @@ def coordenadas_a_nodo(lat: float, lon: float) -> int:
 
 def a_star_ruta(orig: int, dest: int) -> Tuple[List[int], float, float]:
     """
-    Implementación de A* para el proyecto.
+    Implementación de A* para el proyecto (solo lógica).
 
     Devuelve:
       - path: lista de nodos (int) desde orig hasta dest
@@ -123,3 +141,60 @@ def a_star_ruta(orig: int, dest: int) -> Tuple[List[int], float, float]:
     tiempo_min = dist_km / vel_prom * 60.0
 
     return path, dist_km, tiempo_min
+
+
+# -----------------------------------------------------------
+# GIF PARA LOTE DE PEDIDOS (USANDO coordenadas_gifs)
+# -----------------------------------------------------------
+
+def generar_gif_ruta_lote(pedidos: List[Pedido]) -> Optional[str]:
+    """
+    Genera un GIF para un lote de pedidos, encadenando
+    la ruta local -> pedido1 -> pedido2 -> ... en orden.
+
+    Para el GIF usamos las funciones de `coordenadas_gifs`:
+    - a_star_gif (que recalcula la ruta y pinta el grafo)
+    - reconstruct_path_gif
+    - create_gif
+
+    Devuelve el path del GIF o None si falla.
+    """
+
+    # Filtramos pedidos que tengan nodos válidos
+    pedidos_validos = [
+        p for p in pedidos
+        if p.nodo_origen is not None and p.nodo_destino is not None
+    ]
+    if not pedidos_validos:
+        return None
+
+    # En este ejemplo todos usan el mismo nodo_origen (el del local)
+    nodo_inicio = pedidos_validos[0].nodo_origen
+
+    # Orden simple: por distancia_km ascendente (más cercanos primero)
+    pedidos_ordenados = sorted(
+        pedidos_validos,
+        key=lambda p: p.distancia_km
+    )
+
+    # Limpiamos los frames globales del módulo de GIFs
+    frames.clear()
+
+    nodo_actual = nodo_inicio
+    hay_algo = False
+
+    for idx, p in enumerate(pedidos_ordenados, start=1):
+        # Para el GIF usamos el A* propio del módulo de GIFs
+        a_star_gif(nodo_actual, p.nodo_destino)
+        ok = reconstruct_path_gif(nodo_actual, p.nodo_destino, f"Lote #{idx}")
+        if not ok:
+            continue
+
+        nodo_actual = p.nodo_destino
+        hay_algo = True
+
+    if not hay_algo:
+        return None
+
+    gif_file = create_gif("Lote_Reparto", duration=600)
+    return gif_file

@@ -429,8 +429,11 @@ class Chat:
     
     def generar_menu_quitar_producto(self, telefono: str) -> Optional[Dict[str, Any]]:
         """
-        Genera un mensaje interactivo (list) con los productos del carrito
-        para que el usuario pueda elegir cuál quitar.
+        Genera un mensaje interactivo (list) con CADA UNIDAD del carrito
+        para que el usuario pueda elegir exactamente cuál quitar.
+        Ejemplo:
+          - Hamburguesa - $300 - sin panceta
+          - Hamburguesa - $300 - completa
         Devuelve el dict 'interactive' o None si el carrito está vacío.
         """
         pedido = self.pedidos.get(telefono)
@@ -439,18 +442,24 @@ class Chat:
 
         rows: List[Dict[str, Any]] = []
 
-        for idx, item in enumerate(pedido.items, start=1):
-            titulo = item.nombre
-            if len(titulo) > 24:
-                titulo = titulo[:24]
+        for idx_item, item in enumerate(pedido.items):
+            for idx_unidad, unidad in enumerate(item.unidades):
+                titulo = item.nombre
+                if len(titulo) > 24:
+                    titulo = titulo[:24]
 
-            descripcion = f"x{item.cantidad} - ${item.precio} c/u"
+                detalle = unidad.detalle or "completa"
+                descripcion = f"${item.precio} - {detalle}"
 
-            rows.append({
-                "id": f"quitar_item_{idx}",
-                "title": titulo,
-                "description": descripcion,
-            })
+                # id codifica el índice del item y de la unidad
+                rows.append({
+                    "id": f"quitar_unidad_{idx_item}_{idx_unidad}",
+                    "title": titulo,
+                    "description": descripcion,
+                })
+
+        if not rows:
+            return None
 
         mensaje_interactivo: Dict[str, Any] = {
             "type": "list",
@@ -459,16 +468,16 @@ class Chat:
                 "text": "Quitar producto",
             },
             "body": {
-                "text": "Elegí el producto que querés quitar del carrito.",
+                "text": "Elegí la unidad que querés quitar del carrito.",
             },
             "footer": {
-                "text": "Podés volver a pedirlo después si querés.",
+                "text": "Cada línea es una unidad distinta.",
             },
             "action": {
-                "button": "Ver productos",
+                "button": "Ver unidades",
                 "sections": [
                     {
-                        "title": "Productos en tu carrito",
+                        "title": "Unidades en tu carrito",
                         "rows": rows,
                     }
                 ],
@@ -476,24 +485,42 @@ class Chat:
         }
 
         return mensaje_interactivo
+
     
-    def quitar_item_del_carrito(self, telefono: str, indice: int) -> bool:
+  
+    def quitar_unidad_del_carrito(self, telefono: str, idx_item: int, idx_unidad: int) -> bool:
         """
-        Quita del carrito el item en la posición 'indice' (1-based).
+        Quita UNA unidad específica del carrito, indicada por
+        (idx_item, idx_unidad), ambos índices 0-based.
+        Si el item se queda sin unidades, lo elimina del pedido.
         Devuelve True si se quitó algo, False si no.
         """
         pedido = self.pedidos.get(telefono)
         if not pedido or not pedido.items:
             return False
 
-        if indice < 1 or indice > len(pedido.items):
+        if idx_item < 0 or idx_item >= len(pedido.items):
             return False
 
-        item = pedido.items.pop(indice - 1)
+        item = pedido.items[idx_item]
+
+        if idx_unidad < 0 or idx_unidad >= len(item.unidades):
+            return False
+
+        unidad = item.unidades.pop(idx_unidad)
         logging.info(
-            f"[CARRITO] Tel={telefono} quitó {item.nombre} del carrito."
+            f"[CARRITO] Tel={telefono} quitó 1x {item.nombre} (detalle={unidad.detalle!r}) del carrito."
         )
+
+        # Si ya no quedan unidades de ese item, lo sacamos del carrito
+        if not item.unidades:
+            pedido.items.pop(idx_item)
+            logging.info(
+                f"[CARRITO] Item {item.nombre} eliminado del carrito (sin unidades restantes)."
+            )
+
         return True
+
 
     def vaciar_carrito(self, telefono: str) -> None:
         pedido = self.pedidos.get(telefono)

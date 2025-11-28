@@ -584,25 +584,27 @@ async def received_message(request: Request):
             estado_usuarios[number] = {"fase": "esperando_ubicacion"}
             return "EVENT_RECEIVED"
         
+                # ==========================
+        # 3.b) SELECCIÓN de unidad a quitar del carrito
         # ==========================
-        # 3.b) SELECCIÓN de producto a quitar del carrito
-        # ==========================
-        if isinstance(content, str) and content.startswith("quitar_item_"):
-            idx_str = content[len("quitar_item_"):]
+        if isinstance(content, str) and content.startswith("quitar_unidad_"):
+            resto = content[len("quitar_unidad_"):]  # algo como "0_2"
             try:
-                indice = int(idx_str)
-            except ValueError:
+                idx_item_str, idx_unidad_str = resto.split("_", 1)
+                idx_item = int(idx_item_str)
+                idx_unidad = int(idx_unidad_str)
+            except Exception:
                 await send_text(
                     number,
-                    "❌ No se pudo identificar el producto a quitar."
+                    "❌ No se pudo identificar la unidad a quitar."
                 )
                 return "EVENT_RECEIVED"
 
-            ok = chat.quitar_item_del_carrito(number, indice)
+            ok = chat.quitar_unidad_del_carrito(number, idx_item, idx_unidad)
             if not ok:
                 await send_text(
                     number,
-                    "❌ No se pudo quitar el producto (puede que el carrito esté vacío)."
+                    "❌ No se pudo quitar la unidad (puede que el carrito haya cambiado)."
                 )
                 return "EVENT_RECEIVED"
 
@@ -610,12 +612,13 @@ async def received_message(request: Request):
             resumen = chat.resumen_carrito(number)
             await send_text(
                 number,
-                "🗑 Producto quitado del carrito.\n\n" + resumen
+                "🗑 Unidad quitada del carrito.\n\n" + resumen
             )
 
             # Volvemos a ofrecer los botones de siguiente paso
             await send_botones_siguiente_paso(number)
             return "EVENT_RECEIVED"
+
 
         # ==========================
         # 4) CUALQUIER OTRO TEXTO → MOSTRAR MENÚ

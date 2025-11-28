@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import List
 from Dominio.Modelos import Pedido
 
-MAX_PEDIDOS_POR_LOTE = 7
+MAX_PEDIDOS_POR_LOTE = 1
 
 
 @dataclass

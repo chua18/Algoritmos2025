@@ -3,7 +3,7 @@ from typing import List, Dict, Tuple
 
 from Dominio.Modelos import Pedido
 
-MAX_PEDIDOS_POR_LOTE = 1
+MAX_PEDIDOS_POR_LOTE = 7
 ZONAS_VALIDAS = ("NO", "NE", "SO", "SE")
 
 
@@ -34,7 +34,7 @@ class RepartidorZona:
     telefono_whatsapp: str
     lote_actual: LoteReparto = field(default_factory=LoteReparto)
     cola_espera: List[Pedido] = field(default_factory=list)
-    pedidos_entregados: List[Pedido] = field(default_factory=list)  # 👈 NUEVO
+    pedidos_entregados: List[Pedido] = field(default_factory=list)  
 
     def asignar_pedido(self, pedido: Pedido) -> bool:
         """

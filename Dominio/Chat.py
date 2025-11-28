@@ -60,14 +60,25 @@ def calcular_zona(lat_cliente: float, lon_cliente: float) -> str:
 # ------------------ CLASE CHAT ------------------ #
 
 class Chat:
-    def __init__(self) -> None:
-        # Estado para el paginado / filtros
-        self.pagina_actual: int = 1
-        self.categoria_actual: Optional[str] = None
-        self.orden_por_precio: Optional[str] = None  # "asc", "desc" o None
-
-        # Carritos por teléfono: tel -> Pedido (de Dominio.Pedidos)
+    def __init__(self, nombre_restaurante: str = "Restaurante"):
+        self.nombre_restaurante = nombre_restaurante
+        self.pagina_Actual = 1
+        self.categoria_Actual = None
+        self.orden_por_precio = None
+        # 👇 diccionario de pedidos activos por teléfono
         self.pedidos: Dict[str, Pedido] = {}
+
+    # --- NUEVO ---
+    def obtener_o_crear_pedido(self, telefono: str) -> Pedido:
+        """
+        Devuelve el Pedido asociado a este teléfono si existe,
+        o crea uno nuevo, lo guarda en self.pedidos y lo devuelve.
+        """
+        pedido = self.pedidos.get(telefono)
+        if pedido is None:
+            pedido = Pedido(telefono_cliente=telefono)
+            self.pedidos[telefono] = pedido
+        return pedido
 
     # ----------------- ESTADO DEL MENÚ ----------------- #
 

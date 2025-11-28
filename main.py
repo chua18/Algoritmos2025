@@ -390,7 +390,7 @@ async def received_message(request: Request):
             # 👇 después del resumen mostramos botones de siguiente paso
             await send_botones_siguiente_paso(number)
             return "EVENT_RECEIVED"
-       # ==========================
+               # ==========================
         # FASE: esperando ubicación luego de confirmar pedido
         # ==========================
         if estado and estado.get("fase") == "esperando_ubicacion":
@@ -400,8 +400,11 @@ async def received_message(request: Request):
                 lat = loc.get("latitude")
                 lng = loc.get("longitude")
 
+                # Tomamos una dirección legible desde el payload
+                direccion = loc.get("address") or loc.get("name") or ""
+
                 # Guardamos ubicación y calculamos distancia/tiempo/zona dentro de Chat
-                chat.guardar_ubicacion(number, lat, lng)
+                chat.guardar_ubicacion(number, lat, lng, direccion)
                 estado_usuarios.pop(number, None)
 
                 pedido = chat.pedidos.get(number)

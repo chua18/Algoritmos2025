@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from Menu import menuCompleto  # tu menú completo de productos
-from Dominio.Modelos import Pedido, ItemCarrito, UnidadCarrito
+from Dominio.Modelos import Pedido, ItemCarrito
 from Dominio import Rutas
 import osmnx as ox
 from Dominio.Rutas import G
@@ -443,10 +443,12 @@ class Chat:
         pedido.ubicacion = (lat, lng)
 
         try:
-            nodo_local = Rutas.NODO_LOCAL
-            nodo_cliente = Rutas.get_nodo_mas_cercano(lat, lng)
+            # Usamos las constantes definidas en ESTE archivo (Chat.py)
+            nodo_local = NODO_LOCAL
+            nodo_cliente = get_nodo_mas_cercano(lat, lng)
 
             path, dist_km, tiempo_min = Rutas.a_star_ruta(nodo_local, nodo_cliente)
+            
 
             pedido.ubicacion = (lat, lng)
             pedido.direccion_texto = direccion

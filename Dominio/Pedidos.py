@@ -1,6 +1,4 @@
-# Dominio/Pedidos.py
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from Menu import menuCompleto  # usamos tu menuCompleto con 'nombre', 'precio', 'categoria', 'descripcion'
 

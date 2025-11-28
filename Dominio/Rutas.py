@@ -1,6 +1,6 @@
 # Dominio/rutas.py
-from typing import List, Tuple, Optional
-import heapq
+from typing import List, Optional
+
 
 import osmnx as ox
 import networkx as nx  # por si querés usar funciones de networkx también
@@ -47,7 +47,7 @@ for edge in G.edges:
     # weight ≈ tiempo = longitud / velocidad
     G.edges[edge]["weight"] = G.edges[edge]["length"] / maxspeed
 
-    
+
 def _parse_maxspeed(raw) -> float:
     if raw is None:
         return 30.0

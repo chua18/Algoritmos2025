@@ -5,11 +5,21 @@ from typing import Any, Dict, List, Optional
 from Menu import menuCompleto  # tu menú completo de productos
 from Dominio.Modelos import Pedido, ItemCarrito, UnidadCarrito
 from Dominio import Rutas
+import osmnx as ox
+from Dominio.Rutas import G
 
 PAGE_SIZE = 5
 
 LAT_LOCAL = -31.387591856643436
 LON_LOCAL = -57.962891374932944
+
+NODO_LOCAL = ox.nearest_nodes(G, LON_LOCAL, LAT_LOCAL)
+
+def get_nodo_mas_cercano(lat: float, lng: float) -> int:
+    """
+    Devuelve el id de nodo del grafo G más cercano a las coordenadas (lat, lng).
+    """
+    return ox.nearest_nodes(G, lng, lat)
 
 
 # ------------------ HELPER DE PAGINADO ------------------ #

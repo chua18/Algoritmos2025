@@ -23,7 +23,7 @@ app = FastAPI()
 chat = Chat()
 gestor_reparto = GestorReparto()
 
-REPARTIDOR_PHONE = "59896964635"
+REPARTIDOR_PHONE = "59897733913"
 
 # --- CREDENCIALES Y CONFIGURACIÓN ---
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")

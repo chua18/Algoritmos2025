@@ -245,7 +245,7 @@ def reconstruct_path_gif(orig, dest, algorithm_name=""):
     Reconstruye el camino usando los punteros 'previous' dejados por a_star_gif
     y calcula la distancia total en km. También agrega frames para el GIF.
     """
-    global frames
+    global frames  # 🔴 ESTA LÍNEA TIENE QUE SER LA PRIMERA DENTRO DE LA FUNCIÓN
 
     # 1) Chequeo básico: ¿hay camino?
     if G.nodes[dest].get("previous") is None and dest != orig:
@@ -268,7 +268,6 @@ def reconstruct_path_gif(orig, dest, algorithm_name=""):
             # Camino roto, no deberia pasar si se chequeo arriba
             break
 
-        # Guardamos la arista como (u, v, key) para MultiDiGraph
         edge_data = G.get_edge_data(prev, curr)
         if edge_data:
             e0 = list(edge_data.values())[0]
@@ -287,7 +286,6 @@ def reconstruct_path_gif(orig, dest, algorithm_name=""):
 
         curr = prev
 
-    # Cerramos el camino agregando el origen
     path_edges.reverse()
     dist_km = dist_m / 1000.0
 
@@ -298,7 +296,6 @@ def reconstruct_path_gif(orig, dest, algorithm_name=""):
         vel_prom = 0.0
         tiempo_min = 0.0
 
-    # 4) Frame final con título resumen
     if vel_prom > 0:
         final_title = (
             f"{algorithm_name} - CAMINO OPTIMO\n"
@@ -312,6 +309,7 @@ def reconstruct_path_gif(orig, dest, algorithm_name=""):
             f"Distancia: {dist_km:.2f}km"
         )
 
+    # Frame final
     plot_graph_to_image(final_title, save_frame=True, frame_num=len(path_edges))
 
     print(f"Distancia: {dist_km:.2f} km")
@@ -322,88 +320,6 @@ def reconstruct_path_gif(orig, dest, algorithm_name=""):
 
     return True
 
-    global frames
-
-    # 1) Chequeo de que haya camino
-    if G.nodes[dest].get("previous") is None and dest != orig:
-        print("No se encontro un camino valido")
-        return False
-
-    # 2) Resetear estilos
-    for edge in G.edges:
-        style_unvisited_edge(edge)
-
-    dist = 0.0
-    speeds = []
-    curr = dest
-    path_edges = []
-
-    # 3) Reconstruir el camino nodos → aristas
-    while curr != orig:
-        prev = G.nodes[curr].get("previous")
-        if prev is None:
-            print("Error: Camino incompleto")
-            return False
-
-        edge_key = (prev, curr, 0)
-        if edge_key not in G.edges:
-            print(f"Arista {edge_key} no encontrada en el grafo")
-            return False
-
-        path_edges.append(edge_key)
-
-        data = G.edges[edge_key]
-        dist += data.get("length", 0.0)
-
-        maxspeed = data.get("maxspeed")
-        if isinstance(maxspeed, (int, float)):
-            speeds.append(maxspeed)
-
-        curr = prev
-
-    # 4) Pintar el camino paso a paso
-    for i, edge in enumerate(reversed(path_edges)):
-        style_path_edge(edge)
-        plot_graph_to_image(
-            f"{algorithm_name} - Construyendo camino... {i+1}/{len(path_edges)}",
-            save_frame=True,
-            frame_num=i,
-        )
-
-    # 5) Calcular métricas (sin dividir por cero)
-    dist_km = dist / 1000.0 if dist > 0 else 0.0
-
-    if speeds:
-        vel_prom = sum(speeds) / len(speeds)
-        tiempo_min = dist_km / vel_prom * 60.0 if vel_prom > 0 else 0.0
-    else:
-        # Caso borde: no hay velocidades registradas
-        vel_prom = 0.0
-        tiempo_min = 0.0
-
-    # 6) Título del último frame
-    if vel_prom > 0:
-        final_title = (
-            f"{algorithm_name} - CAMINO OPTIMO\n"
-            f"Distancia: {dist_km:.2f}km | "
-            f"Velocidad: {vel_prom:.1f}km/h | "
-            f"Tiempo: {tiempo_min:.1f}min"
-        )
-    else:
-        final_title = (
-            f"{algorithm_name} - CAMINO OPTIMO\n"
-            f"Distancia: {dist_km:.2f}km"
-        )
-
-    plot_graph_to_image(final_title, save_frame=True, frame_num=len(path_edges))
-
-    print(f"Distancia: {dist_km:.2f} km")
-    if vel_prom > 0:
-        print(f"Velocidad promedio: {vel_prom:.1f} km/h")
-        print(f"Tiempo total: {tiempo_min:.1f} minutos")
-    print(f"Camino completado: {len(frames)} frames totales")
-
-    return True
 
 def create_gif(algorithm_name, duration=500):
     if not frames:

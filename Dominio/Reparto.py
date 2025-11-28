@@ -3,7 +3,7 @@ from typing import List, Dict, Tuple
 
 from Dominio.Modelos import Pedido
 
-MAX_PEDIDOS_POR_LOTE = 7
+MAX_PEDIDOS_POR_LOTE = 1
 ZONAS_VALIDAS = ("NO", "NE", "SO", "SE")
 
 

@@ -42,18 +42,18 @@ def _parse_maxspeed(raw) -> float:
 
 
 def coordenadas_a_nodo(lat: float, lon: float) -> int:
-    """
-    Convierte lat/lon a nodo más cercano del grafo.
-    Ojo: osmnx usa (x = lon, y = lat).
-    """
+    
+   # Convierte lat/lon a nodo más cercano del grafo.
+  
+    
     return ox.distance.nearest_nodes(G, lon, lat)
 
 
 def a_star_ruta(nodo_origen: int, nodo_destino: int):
-    """
-    Calcula ruta más corta por 'length' entre nodo_origen y nodo_destino.
-    Devuelve: path (lista de nodos), dist_km, tiempo_min.
-    """
+   
+   # Calcula ruta más corta por 'length' entre nodo_origen y nodo_destino.
+   # Devuelve: path (lista de nodos), dist_km, tiempo_min.
+  
     try:
         path = nx.shortest_path(G, nodo_origen, nodo_destino, weight="length")
     except nx.NetworkXNoPath:
@@ -93,18 +93,7 @@ def a_star_ruta(nodo_origen: int, nodo_destino: int):
 # -----------------------------------------------------------
 
 def generar_gif_ruta_lote(pedidos: List[Pedido]) -> Optional[str]:
-    """
-    Genera un GIF para un lote de pedidos, encadenando
-    la ruta local -> pedido1 -> pedido2 -> ... en orden.
-
-    Para el GIF usamos las funciones de `coordenadas_gifs`:
-    - a_star_gif (que recalcula la ruta y pinta el grafo)
-    - reconstruct_path_gif
-    - create_gif
-
-    Devuelve el path del GIF o None si falla.
-    """
-
+ 
     # Filtramos pedidos que tengan nodos válidos
     pedidos_validos = [
         p for p in pedidos

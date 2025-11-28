@@ -4,9 +4,8 @@ from typing import List, Tuple, Optional
 
 @dataclass
 class Cliente:
-    """
-    Representa un cliente del sistema.
-    """
+    #Representa un cliente del sistema.
+   
     telefono: str
     nombre: str
     pedidos: List["Pedido"] = field(default_factory=list)
@@ -31,9 +30,8 @@ class ItemCarrito:
         return len(self.unidades)
 
     def agregar_unidades(self, detalle: str, cantidad: int) -> None:
-        """
-        Agrega 'cantidad' unidades con el mismo detalle.
-        """
+        #Agrega 'cantidad' unidades con el mismo detalle.
+        
         for _ in range(cantidad):
             self.unidades.append(UnidadCarrito(detalle=detalle))
 
@@ -62,10 +60,9 @@ class Pedido:
         return sum(item.precio * item.cantidad for item in self.items)
 
     def obtener_item(self, id_producto: str, nombre: str, precio: int) -> ItemCarrito:
-        """
-        Devuelve el ItemCarrito del producto si ya existe en el pedido,
-        o lo crea y lo agrega a la lista de items.
-        """
+        
+       # Devuelve el ItemCarrito del producto si ya existe en el pedido, o lo crea y lo agrega a la lista de items.
+        
         for item in self.items:
             if item.id_producto == id_producto:
                 return item
@@ -89,9 +86,8 @@ class Pedido:
         detalle: str,
         cantidad: int = 1,
     ) -> None:
-        """
-        Agrega 'cantidad' unidades de un producto al pedido, cada una con su 'detalle'.
-        El detalle se guarda en UnidadCarrito.detalle, no en ItemCarrito.
-        """
+        
+        #Agrega 'cantidad' unidades de un producto al pedido, cada una con su 'detalle'.  El detalle se guarda en UnidadCarrito.detalle, no en ItemCarrito.
+       
         item = self.obtener_item(id_producto=id_producto, nombre=nombre, precio=precio)
         item.agregar_unidades(detalle=detalle, cantidad=cantidad)

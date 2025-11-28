@@ -1,4 +1,3 @@
-# Dominio/Chat.py
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -42,19 +41,7 @@ def get_paginated_menu(page: int = 1, categoria: Optional[str] = None) -> List[D
     return productos[inicio:fin]
 
 def calcular_zona(lat_cliente: float, lon_cliente: float) -> str:
-    """
-    Divide el plano en 4 zonas con el local como origen:
-    - Noroeste (NO)
-    - Noreste (NE)
-    - Suroeste (SO)
-    - Sureste (SE)
-
-    OJO: estamos en hemisferio sur, las latitudes son negativas.
-    - lat_cliente > LAT_LOCAL => está más al NORTE
-    - lat_cliente < LAT_LOCAL => está más al SUR
-    - lon_cliente > LON_LOCAL => está más al ESTE
-    - lon_cliente < LON_LOCAL => está más al OESTE
-    """
+    # Divide el plano en 4 zonas con el local como origen:- Noroeste (NO)- Noreste (NE)- Suroeste (SO)- Sureste (SE)
     es_norte = lat_cliente > LAT_LOCAL
     es_este = lon_cliente > LON_LOCAL
 
@@ -67,8 +54,6 @@ def calcular_zona(lat_cliente: float, lon_cliente: float) -> str:
     return "SE"        # Sureste
 
 
-# ------------------ CLASE CHAT ------------------ #
-
 class Chat:
     def __init__(self, nombre_restaurante: str = "Restaurante"):
         self.nombre_restaurante = nombre_restaurante
@@ -78,12 +63,11 @@ class Chat:
         # 👇 diccionario de pedidos activos por teléfono
         self.pedidos: Dict[str, Pedido] = {}
 
-    # --- NUEVO ---
+    
     def obtener_o_crear_pedido(self, telefono: str) -> Pedido:
-        """
-        Devuelve el Pedido asociado a este teléfono si existe,
-        o crea uno nuevo, lo guarda en self.pedidos y lo devuelve.
-        """
+        
+       # Devuelve el Pedido asociado a este teléfono si existe, o crea uno nuevo, lo guarda en self.pedidos y lo devuelve.
+        
         pedido = self.pedidos.get(telefono)
         if pedido is None:
             pedido = Pedido(telefono_cliente=telefono)
@@ -93,22 +77,18 @@ class Chat:
     # ----------------- ESTADO DEL MENÚ ----------------- #
 
     def reset_estado(self) -> None:
-        """
-        Deja el menú en estado 'limpio':
-        - Página 1
-        - Sin categoría filtrada
-        - Sin orden especial por precio
-        (NO toca el carrito ni pedidos).
-        """
+        
+        # Deja el menú en estado 'limpio':- Página 1
+        #- Sin categoría filtrada
+        #- Sin orden especial por precio
+        
         self.pagina_actual = 1
         self.categoria_actual = None
         self.orden_por_precio = None
         logging.info(">>> RESET de estado de menú (pagina=1, sin categoria, sin orden)")
 
     def _obtener_menu_actual(self) -> List[Dict[str, Any]]:
-        """
-        Devuelve la página actual de productos, aplicando orden por precio si corresponde.
-        """
+        #Devuelve la página actual de productos, aplicando orden por precio si corresponde.
         productos = get_paginated_menu(self.pagina_actual, self.categoria_actual)
 
         if self.orden_por_precio == "asc":
@@ -118,18 +98,17 @@ class Chat:
 
         return productos
 
-    # ----------------- MENÚ PAGINADO PRINCIPAL ----------------- #
+    # ----------------- MENU PAGINADO PRINCIPAL ----------------- #
 
     def generar_mensaje_menu(self) -> Dict[str, Any]:
-        """
-        Menú de productos (list) respetando los límites de WhatsApp.
-
-        - Si NO hay filtro de categoría: menú normal paginado.
-        - Si HAY filtro:
-            * 'Siguiente página' solo si hay otra página real.
-            * 'Volver al inicio' aparece recién desde la página 3.
-            * 'Ver todos' (categoria_Todos) SIEMPRE aparece mientras haya filtro.
-        """
+        
+        # menu de productos (list) respetando los límites de WhatsApp.
+        # si no hay filtro de categoría: menu normal paginado.
+        # si hay filtro:
+        #   * 'Siguiente página' solo si hay otra página real.
+        #   * 'Volver al inicio' aparece recién desde la página 3.
+        #   * 'Ver todos' (categoria_Todos) SIEMPRE aparece mientras haya filtro.
+        
         productos = self._obtener_menu_actual()
 
         rows_productos: List[Dict[str, Any]] = []
@@ -251,9 +230,9 @@ class Chat:
     # ---------- MENÚ DE CATEGORÍAS ---------- #
 
     def generar_mensaje_categorias(self) -> Dict[str, Any]:
-        """
-        Menú list SOLO con categorías para que el usuario elija una.
-        """
+       
+        # Menú list SOLO con categorías para que el usuario elija una.
+       
         categorias_set = {p["categoria"] for p in menuCompleto}
         categorias = sorted(list(categorias_set))
 
@@ -344,10 +323,9 @@ class Chat:
     # ----------------- CARRITO ----------------- #
 
     def _buscar_producto_por_row_id(self, row_id: str) -> Optional[Dict[str, Any]]:
-        """
-        row_id viene del menú, ej: 'producto_6'.
-        Devuelve el dict del producto correspondiente en menuCompleto.
-        """
+        
+       # row_id viene del menú, ej: 'producto_6'. Devuelve el dict del producto correspondiente en menuCompleto.
+        
         if not row_id.startswith("producto_"):
             return None
 
@@ -365,11 +343,9 @@ class Chat:
         cantidad: int,
         detalle: str,
     ) -> tuple[ItemCarrito, int]:
-        """
-        Agrega 'cantidad' unidades de un producto (row_id tipo 'producto_6')
-        al carrito de ese teléfono, con el mismo detalle.
-        Devuelve (item_modificado, total_actual).
-        """
+        
+        #Agrega 'cantidad' unidades de un producto (row_id tipo 'producto_6') al carrito de ese teléfono, con el mismo detalle. Devuelve (item_modificado, total_actual).
+        
         producto = self._buscar_producto_por_row_id(row_id)
         if not producto:
             raise ValueError(f"No se encontró producto para row_id={row_id!r}")
@@ -398,10 +374,8 @@ class Chat:
         return item, total
 
     def resumen_carrito(self, telefono: str) -> str:
-        """
-        Devuelve un texto con el contenido del carrito de ese teléfono,
-        mostrando las unidades agrupadas por detalle.
-        """
+        # Devuelve un texto con el contenido del carrito de ese teléfono, mostrando las unidades agrupadas por detalle.
+       
         pedido = self.pedidos.get(telefono)
         if not pedido or not pedido.items:
             return "🧺 Tu carrito está vacío por ahora."
@@ -427,14 +401,13 @@ class Chat:
         return "\n".join(lineas)
     
     def generar_menu_quitar_producto(self, telefono: str) -> Optional[Dict[str, Any]]:
-        """
-        Genera un mensaje interactivo (list) con CADA UNIDAD del carrito
-        para que el usuario pueda elegir exactamente cuál quitar.
-        Ejemplo:
-          - Hamburguesa - $300 - sin panceta
-          - Hamburguesa - $300 - completa
-        Devuelve el dict 'interactive' o None si el carrito está vacío.
-        """
+        
+        #Genera un mensaje interactivo (list) con CADA UNIDAD del carrito para que el usuario pueda elegir exactamente cuál quitar.
+        #Ejemplo:
+        #- Hamburguesa - $300 - sin panceta
+        #- Hamburguesa - $300 - completa
+        #Devuelve el dict 'interactive' o None si el carrito está vacío.
+        
         pedido = self.pedidos.get(telefono)
         if not pedido or not pedido.items:
             return None
@@ -488,12 +461,11 @@ class Chat:
     
   
     def quitar_unidad_del_carrito(self, telefono: str, idx_item: int, idx_unidad: int) -> bool:
-        """
-        Quita UNA unidad específica del carrito, indicada por
-        (idx_item, idx_unidad), ambos índices 0-based.
-        Si el item se queda sin unidades, lo elimina del pedido.
-        Devuelve True si se quitó algo, False si no.
-        """
+        
+        #Quita UNA unidad específica del carrito, indicada por (idx_item, idx_unidad), ambos índices 0.
+        #Si el item se queda sin unidades, lo elimina del pedido.
+        #Devuelve True si se quitó algo, False si no.
+        
         pedido = self.pedidos.get(telefono)
         if not pedido or not pedido.items:
             return False
@@ -564,10 +536,9 @@ class Chat:
 
 
     def guardar_direccion_texto(self, telefono: str, direccion: str) -> None:
-        """
-        Guarda direccion escrita por el usuario en el Pedido (por si no manda ubicación).
-        No calcula ruta porque no hay lat/lon, pero queda la dirección registrada.
-        """
+        
+        #Guarda direccion escrita por el usuario en el Pedido (por si no manda ubicación). No calcula ruta porque no hay lat/lon, pero queda la dirección registrada.
+        
         pedido = self.pedidos.get(telefono)
         if not pedido:
             logging.warning(f"[DIRECCION] No hay pedido para tel={telefono}")

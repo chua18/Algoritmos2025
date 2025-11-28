@@ -157,37 +157,31 @@ async def upload_media(file_path: str, mime_type: str = "image/gif") -> str:
 
 async def enviar_lote_actual_al_repartidor() -> None:
     """
-    Toma el lote_actual del gestor, genera un GIF con la ruta de todos
-    los pedidos, y lo envía al repartidor con un resumen de cada pedido.
+    Toma el lote_actual del gestor, genera la imagen (PNG) con la ruta de todos
+    los pedidos y la envía al repartidor con un resumen de cada pedido.
     Luego marca el lote como enviado (y carga el siguiente si hay cola).
     """
     if not REPARTIDOR_PHONE:
         logging.warning("REPARTIDOR_PHONE no configurado.")
         return
 
-    telefonos_lote = gestor_reparto.obtener_lote_actual()
-    if not telefonos_lote:
-        logging.info("No hay pedidos en el lote actual.")
-        return
-
+    # Ahora el lote guarda directamente pedidos, no teléfonos
     pedidos_lote: List[Pedido] = gestor_reparto.obtener_lote_actual()
     if not pedidos_lote:
         logging.info("No hay pedidos en el lote actual.")
         return
 
-    # 1) Generar GIF para el lote
-    gif_path = Rutas.generar_gif_ruta_lote(pedidos_lote)
-    if not gif_path:
-        logging.warning("No se pudo generar el GIF del lote.")
-        return
-    if not gif_path:
-        logging.warning("No se pudo generar el GIF del lote.")
+    # 1) Generar imagen (PNG) para el lote a partir del recorrido final del GIF
+    png_path = Rutas.generar_gif_ruta_lote(pedidos_lote)
+    # Nota: generar_gif_ruta_lote ahora debe devolver la ruta del PNG final
+    if not png_path:
+        logging.warning("No se pudo generar la imagen del lote (PNG).")
         return
 
-    # 2) Subir GIF
-    media_id = await upload_media(gif_path)
+    # 2) Subir la imagen PNG
+    media_id = await upload_media(png_path, "image/png")
     if not media_id:
-        logging.warning("No se pudo subir el GIF a WhatsApp.")
+        logging.warning("No se pudo subir la imagen PNG a WhatsApp.")
         return
 
     # 3) Armar resumen para el repartidor
@@ -224,7 +218,7 @@ async def enviar_lote_actual_al_repartidor() -> None:
     }
 
     await send_to_whatsapp(payload)
-    logging.info("GIF del lote enviado al repartidor.")
+    logging.info("Imagen de ruta del lote enviada al repartidor.")
 
     # 4) Marcar lote como enviado y preparar el siguiente
     gestor_reparto.marcar_lote_enviado()

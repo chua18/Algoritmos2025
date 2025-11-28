@@ -197,5 +197,8 @@ def generar_gif_ruta_lote(pedidos: List[Pedido]) -> Optional[str]:
     if not hay_algo:
         return None
 
-    gif_file = create_gif("Lote_Reparto", duration=600)
-    return gif_file
+    png_path = create_gif("pathfinding_lote_reparto_salto.gif")
+
+# Podés decidir qué querés devolver
+# Para WhatsApp nos interesa el PNG
+    return png_path

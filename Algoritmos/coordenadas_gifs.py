@@ -321,25 +321,41 @@ def reconstruct_path_gif(orig, dest, algorithm_name=""):
     return True
 
 
-def create_gif(algorithm_name, duration=500):
+def create_gif(output_path="pathfinding.gif", duration=0.6, loop=0):
+    """
+    Crea el GIF a partir de la lista global 'frames' y, además,
+    guarda el ÚLTIMO frame como PNG para poder enviarlo por WhatsApp.
+    Devuelve (gif_path, png_path).
+    """
+    global frames
+
     if not frames:
-        print("No hay frames para crear el GIF")
-        return None
-    filename = f"pathfinding_{algorithm_name.lower()}_salto.gif"
+        print("No hay frames para crear el GIF.")
+        return None, None
+
+    # 1) Crear el GIF como siempre
+    frames[0].save(
+        output_path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=int(duration * 1000),
+        loop=loop,
+    )
+
+    # 2) Guardar el último frame como PNG
+    png_path = os.path.splitext(output_path)[0] + ".png"
     try:
-        frames[0].save(
-            filename,
-            save_all=True,
-            append_images=frames[1:],
-            duration=duration,
-            loop=0
-        )
-        print(f"GIF creado exitosamente: {filename}")
-        print(f"{len(frames)} frames | {len(frames)*duration/1000:.1f}s total")
-        return filename
+        ultimo_frame = frames[-1]
+        # Si ultimo_frame es un objeto PIL.Image:
+        ultimo_frame.save(png_path, format="PNG")
+        print(f"PNG del frame final creado: {png_path}")
     except Exception as e:
-        print(f"Error al crear el GIF: {e}")
-        return None
+        print(f"Error al guardar el PNG final: {e}")
+        png_path = None
+
+    print(f"GIF creado exitosamente: {output_path}")
+    print(f"{len(frames)} frames | PNG final en: {png_path}")
+    return output_path, png_path
 
 def get_coordinates():
     print("SELECCION DE COORDENADAS PARA SALTO, URUGUAY")

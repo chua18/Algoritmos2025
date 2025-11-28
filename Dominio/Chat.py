@@ -426,6 +426,74 @@ class Chat:
         lineas.append(f"\n💵 *Total:* ${pedido.total}")
         lineas.append("\nEscribí *confirmar* para finalizar o *borrar* para vaciar el carrito.")
         return "\n".join(lineas)
+    
+    def generar_menu_quitar_producto(self, telefono: str) -> Optional[Dict[str, Any]]:
+        """
+        Genera un mensaje interactivo (list) con los productos del carrito
+        para que el usuario pueda elegir cuál quitar.
+        Devuelve el dict 'interactive' o None si el carrito está vacío.
+        """
+        pedido = self.pedidos.get(telefono)
+        if not pedido or not pedido.items:
+            return None
+
+        rows: List[Dict[str, Any]] = []
+
+        for idx, item in enumerate(pedido.items, start=1):
+            titulo = item.nombre
+            if len(titulo) > 24:
+                titulo = titulo[:24]
+
+            descripcion = f"x{item.cantidad} - ${item.precio} c/u"
+
+            rows.append({
+                "id": f"quitar_item_{idx}",
+                "title": titulo,
+                "description": descripcion,
+            })
+
+        mensaje_interactivo: Dict[str, Any] = {
+            "type": "list",
+            "header": {
+                "type": "text",
+                "text": "Quitar producto",
+            },
+            "body": {
+                "text": "Elegí el producto que querés quitar del carrito.",
+            },
+            "footer": {
+                "text": "Podés volver a pedirlo después si querés.",
+            },
+            "action": {
+                "button": "Ver productos",
+                "sections": [
+                    {
+                        "title": "Productos en tu carrito",
+                        "rows": rows,
+                    }
+                ],
+            },
+        }
+
+        return mensaje_interactivo
+    
+    def quitar_item_del_carrito(self, telefono: str, indice: int) -> bool:
+        """
+        Quita del carrito el item en la posición 'indice' (1-based).
+        Devuelve True si se quitó algo, False si no.
+        """
+        pedido = self.pedidos.get(telefono)
+        if not pedido or not pedido.items:
+            return False
+
+        if indice < 1 or indice > len(pedido.items):
+            return False
+
+        item = pedido.items.pop(indice - 1)
+        logging.info(
+            f"[CARRITO] Tel={telefono} quitó {item.nombre} del carrito."
+        )
+        return True
 
     def vaciar_carrito(self, telefono: str) -> None:
         pedido = self.pedidos.get(telefono)

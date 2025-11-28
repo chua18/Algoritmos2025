@@ -21,9 +21,15 @@ app = FastAPI()
 
 # Instancia de tu Chat anteriora
 chat = Chat()
-gestor_reparto = GestorReparto()
 
-REPARTIDOR_PHONE = "59891307359"
+REPARTIDORES_PHONE = {
+    "NO": os.getenv("REPARTIDOR_NO", "59891307359"),
+    "NE": os.getenv("REPARTIDOR_NE", "59896964635"),
+    "SO": os.getenv("REPARTIDOR_SO", "59891466197"),
+    "SE": os.getenv("REPARTIDOR_SE", "59892239294"),
+}
+
+gestor_reparto = GestorReparto.desde_config(REPARTIDORES_PHONE)
 
 # --- CREDENCIALES Y CONFIGURACIÓN ---
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")
@@ -92,8 +98,8 @@ async def send_text(to: str, body: str) -> None:
 
 async def send_botones_siguiente_paso(to: str) -> None:
     """
-    Envía botones para que el usuario elija si quiere seguir comprando
-    o finalizar el pedido.
+    Envía botones para que el usuario elija si quiere seguir comprando,
+    quitar productos o finalizar el pedido.
     """
     payload = {
         "messaging_product": "whatsapp",
@@ -116,6 +122,13 @@ async def send_botones_siguiente_paso(to: str) -> None:
                     {
                         "type": "reply",
                         "reply": {
+                            "id": "quitar_producto",
+                            "title": "🗑 Quitar producto",
+                        },
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {
                             "id": "finalizar_pedido",
                             "title": "✅ Finalizar pedido",
                         },
@@ -125,6 +138,7 @@ async def send_botones_siguiente_paso(to: str) -> None:
         },
     }
     await send_to_whatsapp(payload)
+
     
 async def upload_media(file_path: str, mime_type: str = "image/gif") -> str:
     """
@@ -155,38 +169,38 @@ async def upload_media(file_path: str, mime_type: str = "image/gif") -> str:
         return media_id
 
 
-async def enviar_lote_actual_al_repartidor() -> None:
+async def enviar_lote_zona_al_repartidor(zona: str) -> None:
     """
-    Toma el lote_actual del gestor, genera la imagen (PNG) con la ruta de todos
-    los pedidos y la envía al repartidor con un resumen de cada pedido.
+    Toma el lote_actual del repartidor de la zona indicada,
+    genera la imagen (PNG) con la ruta de todos los pedidos,
+    y la envía al repartidor con un resumen de cada pedido.
     Luego marca el lote como enviado (y carga el siguiente si hay cola).
     """
-    if not REPARTIDOR_PHONE:
-        logging.warning("REPARTIDOR_PHONE no configurado.")
+    repartidor = gestor_reparto.repartidores.get(zona)
+    if not repartidor:
+        logging.warning(f"[REPARTO] No hay repartidor configurado para zona={zona}")
         return
 
-    # Ahora el lote guarda directamente pedidos, no teléfonos
-    pedidos_lote: List[Pedido] = gestor_reparto.obtener_lote_actual()
+    pedidos_lote: List[Pedido] = gestor_reparto.obtener_lote_actual(zona)
     if not pedidos_lote:
-        logging.info("No hay pedidos en el lote actual.")
+        logging.info(f"[REPARTO] No hay pedidos en el lote actual de zona={zona}.")
         return
 
-    # 1) Generar imagen (PNG) para el lote a partir del recorrido final del GIF
+    # 1) Generar imagen (PNG) para el lote
     png_path = Rutas.generar_gif_ruta_lote(pedidos_lote)
-    # Nota: generar_gif_ruta_lote ahora debe devolver la ruta del PNG final
     if not png_path:
-        logging.warning("No se pudo generar la imagen del lote (PNG).")
+        logging.warning(f"[REPARTO] No se pudo generar la imagen del lote (PNG) para zona={zona}.")
         return
 
     # 2) Subir la imagen PNG
     media_id = await upload_media(png_path, "image/png")
     if not media_id:
-        logging.warning("No se pudo subir la imagen PNG a WhatsApp.")
+        logging.warning(f"[REPARTO] No se pudo subir la imagen PNG a WhatsApp para zona={zona}.")
         return
 
     # 3) Armar resumen para el repartidor
     lineas: List[str] = []
-    lineas.append("🛵 *Nuevo lote de pedidos (hasta 7)*")
+    lineas.append(f"🛵 *Nuevo lote de pedidos (hasta 7) - Zona {zona}*")
 
     for idx, p in enumerate(pedidos_lote, start=1):
         if p.direccion_texto:
@@ -209,7 +223,7 @@ async def enviar_lote_actual_al_repartidor() -> None:
 
     payload = {
         "messaging_product": "whatsapp",
-        "to": REPARTIDOR_PHONE,
+        "to": repartidor.telefono_whatsapp,
         "type": "image",
         "image": {
             "id": media_id,
@@ -218,34 +232,33 @@ async def enviar_lote_actual_al_repartidor() -> None:
     }
 
     await send_to_whatsapp(payload)
-    logging.info("Imagen de ruta del lote enviada al repartidor.")
+    logging.info(f"[REPARTO] Imagen de ruta del lote enviada al repartidor de zona={zona}.")
 
     # 4) Marcar lote como enviado y preparar el siguiente
-    gestor_reparto.marcar_lote_enviado()
+    gestor_reparto.marcar_lote_enviado(zona)
+
 
 async def intentar_cerrar_lote(telefono: str) -> None:
     """
     Asigna el pedido de este teléfono al gestor de reparto.
-    Si con este pedido se llena el lote (7 pedidos), genera el GIF
-    y lo envía al repartidor.
+    Si con este pedido se llena el lote (7 pedidos) de su zona,
+    genera la imagen y la envía al repartidor de ESA zona.
 
     IMPORTANTE: una vez que pasa al gestor de reparto,
-    lo sacamos de los pedidos activos del chat para que
-    el usuario no pueda volver a 'confirmar' el mismo pedido.
+    lo sacamos de los pedidos activos del chat.
     """
     pedido = chat.pedidos.get(telefono)
     if not pedido:
         logging.warning(f"[LOTE] No hay pedido activo para tel={telefono}")
         return
 
-    lote_lleno = gestor_reparto.asignar_pedido(pedido)
+    lote_lleno, zona = gestor_reparto.asignar_pedido(pedido)
 
-    # ✅ Limpiamos el pedido activo del chat:
+    # sacamos el pedido activo del chat
     chat.pedidos.pop(telefono, None)
 
     if lote_lleno:
-        await enviar_lote_actual_al_repartidor()
-
+        await enviar_lote_zona_al_repartidor(zona)
 
 # --------------------------------------------------------
 # ENDPOINTS
@@ -507,6 +520,24 @@ async def received_message(request: Request):
         if texto_normalizado == "seguir_comprando":
             await send_menu(number, name)
             return "EVENT_RECEIVED"
+         # Botón / comando "quitar producto"
+        if texto_normalizado == "quitar_producto":
+            menu_quitar = chat.generar_menu_quitar_producto(number)
+            if not menu_quitar:
+                await send_text(
+                    number,
+                    "🧺 Tu carrito está vacío, no hay productos para quitar."
+                )
+                return "EVENT_RECEIVED"
+
+            payload = {
+                "messaging_product": "whatsapp",
+                "to": number,
+                "type": "interactive",
+                "interactive": menu_quitar,
+            }
+            await send_to_whatsapp(payload)
+            return "EVENT_RECEIVED"
         #texto en chat para ver el carrito
         if texto_normalizado in ("carrito", "/carrito"):
             resumen = chat.resumen_carrito(number)
@@ -551,6 +582,39 @@ async def received_message(request: Request):
             )
 
             estado_usuarios[number] = {"fase": "esperando_ubicacion"}
+            return "EVENT_RECEIVED"
+        
+        # ==========================
+        # 3.b) SELECCIÓN de producto a quitar del carrito
+        # ==========================
+        if isinstance(content, str) and content.startswith("quitar_item_"):
+            idx_str = content[len("quitar_item_"):]
+            try:
+                indice = int(idx_str)
+            except ValueError:
+                await send_text(
+                    number,
+                    "❌ No se pudo identificar el producto a quitar."
+                )
+                return "EVENT_RECEIVED"
+
+            ok = chat.quitar_item_del_carrito(number, indice)
+            if not ok:
+                await send_text(
+                    number,
+                    "❌ No se pudo quitar el producto (puede que el carrito esté vacío)."
+                )
+                return "EVENT_RECEIVED"
+
+            # Mostramos el nuevo resumen del carrito
+            resumen = chat.resumen_carrito(number)
+            await send_text(
+                number,
+                "🗑 Producto quitado del carrito.\n\n" + resumen
+            )
+
+            # Volvemos a ofrecer los botones de siguiente paso
+            await send_botones_siguiente_paso(number)
             return "EVENT_RECEIVED"
 
         # ==========================

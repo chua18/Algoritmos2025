@@ -170,18 +170,16 @@ async def enviar_lote_actual_al_repartidor() -> None:
         logging.info("No hay pedidos en el lote actual.")
         return
 
-    pedidos_lote: List[Pedido] = []
-    for tel in telefonos_lote:
-        p = chat.pedidos.get(tel)
-        if p:
-            pedidos_lote.append(p)
-
+    pedidos_lote: List[Pedido] = gestor_reparto.obtener_lote_actual()
     if not pedidos_lote:
-        logging.info("No se encontraron pedidos válidos para el lote.")
+        logging.info("No hay pedidos en el lote actual.")
         return
 
     # 1) Generar GIF para el lote
     gif_path = Rutas.generar_gif_ruta_lote(pedidos_lote)
+    if not gif_path:
+        logging.warning("No se pudo generar el GIF del lote.")
+        return
     if not gif_path:
         logging.warning("No se pudo generar el GIF del lote.")
         return
@@ -236,10 +234,24 @@ async def intentar_cerrar_lote(telefono: str) -> None:
     Asigna el pedido de este teléfono al gestor de reparto.
     Si con este pedido se llena el lote (7 pedidos), genera el GIF
     y lo envía al repartidor.
+
+    IMPORTANTE: una vez que pasa al gestor de reparto,
+    lo sacamos de los pedidos activos del chat para que
+    el usuario no pueda volver a 'confirmar' el mismo pedido.
     """
-    lote_lleno = gestor_reparto.asignar_pedido(telefono)
+    pedido = chat.pedidos.get(telefono)
+    if not pedido:
+        logging.warning(f"[LOTE] No hay pedido activo para tel={telefono}")
+        return
+
+    lote_lleno = gestor_reparto.asignar_pedido(pedido)
+
+    # ✅ Limpiamos el pedido activo del chat:
+    chat.pedidos.pop(telefono, None)
+
     if lote_lleno:
         await enviar_lote_actual_al_repartidor()
+
 
 # --------------------------------------------------------
 # ENDPOINTS

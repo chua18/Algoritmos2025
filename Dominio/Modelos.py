@@ -49,28 +49,35 @@ class Pedido:
 
     def obtener_item(self, id_producto: str, nombre: str, precio: int) -> ItemCarrito:
         """
-        Devuelve el ItemCarrito de ese producto si ya existe,
-        si no, lo crea y lo agrega a la lista.
+        Devuelve el ItemCarrito del producto si ya existe en el pedido,
+        o lo crea y lo agrega a la lista de items.
         """
-        for it in self.items:
-            if it.id_producto == id_producto:
-                return it
+        for item in self.items:
+            if item.id_producto == id_producto:
+                return item
 
-        nuevo = ItemCarrito(id_producto=id_producto, nombre=nombre, precio=precio)
+        nuevo = ItemCarrito(
+            id_producto=id_producto,
+            nombre=nombre,
+            precio=precio,
+        )
         self.items.append(nuevo)
         return nuevo
 
     def vaciar(self) -> None:
         self.items.clear()
 
-    def agregar_item(self, item: ItemCarrito) -> None:
+    def agregar_item(
+        self,
+        id_producto: str,
+        nombre: str,
+        precio: int,
+        detalle: str,
+        cantidad: int = 1,
+    ) -> None:
         """
-        Si el producto ya está en el carrito con el mismo 'detalle',
-        solo aumenta la cantidad. Si el detalle cambia, es otra “sub-línea”.
+        Agrega 'cantidad' unidades de un producto al pedido, cada una con su 'detalle'.
+        El detalle se guarda en UnidadCarrito.detalle, no en ItemCarrito.
         """
-        for existente in self.items:
-            if (existente.id_producto == item.id_producto
-                    and existente.detalle == item.detalle):
-                existente.cantidad += item.cantidad
-                return
-        self.items.append(item)
+        item = self.obtener_item(id_producto=id_producto, nombre=nombre, precio=precio)
+        item.agregar_unidades(detalle=detalle, cantidad=cantidad)

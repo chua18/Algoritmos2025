@@ -764,22 +764,48 @@ def pedidos_por_repartidor():
 @app.get("/pedidosentregados")
 def pedidos_entregados():
     """
-    Devuelve, para cada repartidor, los pedidos que fueron marcados como entregados.
-    (Por ahora, esta lista se llenará cuando uses RepartidorZona.registrar_entrega()
-    en el futuro flujo de confirmación con código).
+    Devuelve, para cada repartidor:
+    - pedidos entregados
+    - promedio de estrellas recibidas
+    - distancia total recorrida (suma de distancias de los pedidos)
+    - gasto estimado de nafta (1 litro cada 10 km)
     """
     data: Dict[str, Any] = {}
 
     for zona, repartidor in gestor_reparto.repartidores.items():
         entregados = repartidor.pedidos_entregados
 
+        # --- Promedio de calificación ---
+        calificaciones = [
+            p.calificacion for p in entregados
+            if getattr(p, "calificacion", None) is not None
+        ]
+        if calificaciones:
+            promedio = sum(calificaciones) / len(calificaciones)
+        else:
+            promedio = None  # o 0.0 si preferís
+
+        # --- Distancia total recorrida (aprox) ---
+        distancia_total_km = 0.0
+        for p in entregados:
+            dist = getattr(p, "distancia_km", 0.0) or 0.0
+            distancia_total_km += dist
+
+        # --- Gasto de nafta: 1 litro cada 10 km ---
+        litros_nafta = distancia_total_km / 10.0
+
         data[zona] = {
             "telefono_repartidor": repartidor.telefono_whatsapp,
             "cantidad_entregados": len(entregados),
+            "cantidad_calificados": len(calificaciones),
+            "promedio_estrellas": promedio,
+            "distancia_total_km": distancia_total_km,
+            "litros_nafta_estimados": litros_nafta,
             "pedidos": [pedido_to_dict(p) for p in entregados],
         }
 
     return data
+
 
 
 @app.get("/entregarpedido/{codigo}")

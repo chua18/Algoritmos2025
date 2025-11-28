@@ -1,6 +1,4 @@
-# Dominio/rutas.py
 from typing import List, Optional
-
 
 import osmnx as ox
 import networkx as nx  # por si querés usar funciones de networkx también
@@ -23,57 +21,24 @@ from Algoritmos.coordenadas_gifs import (
 # Cargar el grafo de Salto, Uruguay
 G = ox.graph_from_place("Salto, Uruguay", network_type="drive")
 
-
-# Configurar atributos de las aristas: maxspeed y weight (tiempo aproximado)
-for edge in G.edges:
-    maxspeed = 40  # valor por defecto
-
-    if "maxspeed" in G.edges[edge]:
-        raw = G.edges[edge]["maxspeed"]
-        if isinstance(raw, list):
-            # tomamos la menor velocidad de la lista
-            try:
-                speeds = [int(str(s).split()[0]) for s in raw]
-                maxspeed = min(speeds)
-            except Exception:
-                maxspeed = 40
-        elif isinstance(raw, str):
-            try:
-                maxspeed = int(raw.split()[0])
-            except Exception:
-                maxspeed = 40
-
-    G.edges[edge]["maxspeed"] = maxspeed
-    # weight ≈ tiempo = longitud / velocidad
-    G.edges[edge]["weight"] = G.edges[edge]["length"] / maxspeed
-
-
 def _parse_maxspeed(raw) -> float:
     if raw is None:
-        return 30.0
+        return 40.0
     if isinstance(raw, (list, tuple)):
         raw = raw[0]
     if isinstance(raw, str):
         digits = "".join(ch for ch in raw if ch.isdigit())
         if digits:
             return float(digits)
-        return 30.0
+        return 40.0
     try:
         return float(raw)
     except Exception:
-        return 30.0
+        return 40.0
 
 # -----------------------------------------------------------
 # A* PARA LÓGICA (DISTANCIA / TIEMPO)
 # -----------------------------------------------------------
-
-def heuristica(n1: int, n2: int) -> float:
-    """
-    Heurística para A*: distancia euclídea entre dos nodos (en coordenadas x,y).
-    """
-    x1, y1 = G.nodes[n1]["x"], G.nodes[n1]["y"]
-    x2, y2 = G.nodes[n2]["x"], G.nodes[n2]["y"]
-    return ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
 
 
 def coordenadas_a_nodo(lat: float, lon: float) -> int:
@@ -107,7 +72,7 @@ def a_star_ruta(nodo_origen: int, nodo_destino: int):
 
         e0 = list(edge_data.values())[0]
         length = float(e0.get("length", 0.0))
-        maxspeed = _parse_maxspeed(e0.get("maxspeed", 30.0))
+        maxspeed = _parse_maxspeed(e0.get("maxspeed", 40.0))
 
         dist_m += length
         speeds.append(maxspeed)
@@ -118,7 +83,7 @@ def a_star_ruta(nodo_origen: int, nodo_destino: int):
         vel_prom = sum(speeds) / len(speeds)
         tiempo_min = dist_km / vel_prom * 60.0
     else:
-        vel_prom = 30.0
+        vel_prom = 40.0
         tiempo_min = dist_km / vel_prom * 60.0 if dist_km > 0 else 0.0
 
     return path, dist_km, tiempo_min

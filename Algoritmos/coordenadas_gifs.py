@@ -23,7 +23,7 @@ frames = []
 # Cargar el grafo de Salto, Uruguay
 place_name = "Salto, Uruguay"
 G = ox.graph_from_place(place_name, network_type="drive")
-G = ox.project_graph(G)  # 👈 añade esto
+
 
 # Procesar atributos del grafo (velocidades, pesos, etc.)
 for edge in G.edges:

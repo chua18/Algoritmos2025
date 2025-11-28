@@ -22,14 +22,7 @@ app = FastAPI()
 # Instancia de tu Chat anteriora
 chat = Chat()
 
-REPARTIDORES_PHONE = {
-    "NO": os.getenv("REPARTIDOR_NO", "59891307359"),
-    "NE": os.getenv("REPARTIDOR_NE", "59896964635"),
-    "SO": os.getenv("REPARTIDOR_SO", "59891466197"),
-    "SE": os.getenv("REPARTIDOR_SE", "59892239294"),
-}
 
-gestor_reparto = GestorReparto.desde_config(REPARTIDORES_PHONE)
 
 # --- CREDENCIALES Y CONFIGURACIÓN ---
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")
@@ -43,7 +36,41 @@ logging.info(f"ACCESS_TOKEN cargado? {bool(ACCESS_TOKEN)}")
 logging.info(f"PHONE_NUMBER_ID: {PHONE_NUMBER_ID!r}")
 logging.info(f"GRAPH_SEND_URL: {GRAPH_SEND_URL}")
 
+REPARTIDORES_PHONE = {
+    "NO": os.getenv("REPARTIDOR_NO", "59891307359"),
+    "NE": os.getenv("REPARTIDOR_NE", "59896964635"),
+    "SO": os.getenv("REPARTIDOR_SO", "59891466197"),
+    "SE": os.getenv("REPARTIDOR_SE", "59892239294"),
+}
+
+gestor_reparto = GestorReparto.desde_config(REPARTIDORES_PHONE)
+
+
+
 estado_usuarios: Dict[str, Dict[str, Any]] = {}
+
+
+
+def pedido_to_dict(pedido: Pedido) -> Dict[str, Any]:
+    """
+    Convierte un Pedido en un diccionario serializable a JSON
+    con los campos más importantes para debug/monitoreo.
+    """
+    lat = None
+    lng = None
+    if pedido.ubicacion:
+        lat, lng = pedido.ubicacion
+
+    return {
+        "telefono_cliente": pedido.telefono_cliente,
+        "zona": getattr(pedido, "zona", None),
+        "total": pedido.total,
+        "direccion": pedido.direccion_texto,
+        "ubicacion": {"lat": lat, "lng": lng} if lat is not None and lng is not None else None,
+        "distancia_km": getattr(pedido, "distancia_km", None),
+        "tiempo_estimado_min": getattr(pedido, "tiempo_estimado_min", None),
+        "cantidad_items": len(pedido.items),
+    }
 
 # --------------------------------------------------------
 # FUNCIONES AUXILIARES PARA ENVIAR MENSAJES A WHATSAPP
@@ -464,8 +491,7 @@ async def received_message(request: Request):
                 "o escribí tu dirección exacta en un mensaje."
             )
             return "EVENT_RECEIVED"
-
-
+        
 
         # ==========================
         # 1) SELECCIÓN DE PRODUCTO (LISTA)
@@ -584,7 +610,7 @@ async def received_message(request: Request):
             estado_usuarios[number] = {"fase": "esperando_ubicacion"}
             return "EVENT_RECEIVED"
         
-                # ==========================
+        # ==========================
         # 3.b) SELECCIÓN de unidad a quitar del carrito
         # ==========================
         if isinstance(content, str) and content.startswith("quitar_unidad_"):
@@ -630,6 +656,47 @@ async def received_message(request: Request):
         print("Error en /whatsapp:", e)
         # Siempre devolver EVENT_RECEIVED para que Meta no reintente infinitamente
         return "EVENT_RECEIVED"
+
+@app.get("/pedidosporrepartidor")
+def pedidos_por_repartidor():
+    """
+    Devuelve, para cada repartidor, los pedidos pendientes:
+    - pedidos en el lote actual
+    - pedidos en la cola de espera
+    """
+    data: Dict[str, Any] = {}
+
+    for zona, repartidor in gestor_reparto.repartidores.items():
+        pendientes = repartidor.obtener_pedidos_pendientes()
+
+        data[zona] = {
+            "telefono_repartidor": repartidor.telefono_whatsapp,
+            "cantidad_pendientes": len(pendientes),
+            "pedidos": [pedido_to_dict(p) for p in pendientes],
+        }
+
+    return data
+
+@app.get("/pedidosentregados")
+def pedidos_entregados():
+    """
+    Devuelve, para cada repartidor, los pedidos que fueron marcados como entregados.
+    (Por ahora, esta lista se llenará cuando uses RepartidorZona.registrar_entrega()
+    en el futuro flujo de confirmación con código).
+    """
+    data: Dict[str, Any] = {}
+
+    for zona, repartidor in gestor_reparto.repartidores.items():
+        entregados = repartidor.pedidos_entregados
+
+        data[zona] = {
+            "telefono_repartidor": repartidor.telefono_whatsapp,
+            "cantidad_entregados": len(entregados),
+            "pedidos": [pedido_to_dict(p) for p in entregados],
+        }
+
+    return data
+
 
 
 # --------------------------------------------------------

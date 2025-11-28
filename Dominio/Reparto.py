@@ -34,6 +34,7 @@ class RepartidorZona:
     telefono_whatsapp: str
     lote_actual: LoteReparto = field(default_factory=LoteReparto)
     cola_espera: List[Pedido] = field(default_factory=list)
+    pedidos_entregados: List[Pedido] = field(default_factory=list)  # 👈 NUEVO
 
     def asignar_pedido(self, pedido: Pedido) -> bool:
         """
@@ -52,6 +53,21 @@ class RepartidorZona:
     def obtener_lote_actual(self) -> List[Pedido]:
         return list(self.lote_actual.pedidos)
 
+    def obtener_pedidos_pendientes(self) -> List[Pedido]:
+        """
+        Devuelve todos los pedidos que aún no se marcaron como entregados:
+        - los del lote actual
+        - los de la cola de espera
+        """
+        return list(self.lote_actual.pedidos) + list(self.cola_espera)
+
+    def registrar_entrega(self, pedido: Pedido) -> None:
+        """
+        Registra un pedido como entregado (se llama cuando en el futuro
+        implementes el flujo de entrega con código).
+        """
+        self.pedidos_entregados.append(pedido)
+
     def marcar_lote_enviado(self) -> List[Pedido]:
         """
         Se llama luego de enviar la imagen al repartidor.
@@ -67,7 +83,6 @@ class RepartidorZona:
             self.lote_actual.agregar_pedido(p)
 
         return enviados
-
 
 @dataclass
 class GestorReparto:

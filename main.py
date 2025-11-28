@@ -430,21 +430,19 @@ async def received_message(request: Request):
             # 👇 después del resumen mostramos botones de siguiente paso
             await send_botones_siguiente_paso(number)
             return "EVENT_RECEIVED"
-               # ==========================
+        
+        # ==========================
         # FASE: esperando ubicación luego de confirmar pedido
         # ==========================
         if estado and estado.get("fase") == "esperando_ubicacion":
-            # 1) Si mandó ubicación nativa de WhatsApp
+            # Solo aceptamos ubicación nativa de WhatsApp
             if message.get("type") == "location":
                 loc = message["location"]
                 lat = loc.get("latitude")
                 lng = loc.get("longitude")
 
-                # Tomamos una dirección legible desde el payload
-                direccion = loc.get("address") or loc.get("name") or ""
-
                 # Guardamos ubicación y calculamos distancia/tiempo/zona dentro de Chat
-                chat.guardar_ubicacion(number, lat, lng, direccion)
+                chat.guardar_ubicacion(number, lat, lng, loc.get("address") or loc.get("name") or "")
                 estado_usuarios.pop(number, None)
 
                 pedido = chat.pedidos.get(number)
@@ -465,32 +463,17 @@ async def received_message(request: Request):
                 )
 
                 await intentar_cerrar_lote(number)
-
                 return "EVENT_RECEIVED"
 
-            # 2) Si mandó texto, lo tomamos como dirección escrita
-            if type_message == "text":
-                direccion = content.strip()
-                chat.guardar_direccion_texto(number, direccion)
-                estado_usuarios.pop(number, None)
-
-                await send_text(
-                    number,
-                    "✅ Dirección recibida.\n"
-                    "Tu pedido está en preparación. 🙌"
-                )
-
-                await intentar_cerrar_lote(number)
-
-                return "EVENT_RECEIVED"
-
-            # 3) Cualquier otra cosa: recordamos qué tiene que mandar
+            # Si manda texto, audio, imagen, etc. → pedimos ubicación nativa
             await send_text(
                 number,
-                "Por favor enviá tu ubicación (clip ➜ Ubicación) "
-                "o escribí tu dirección exacta en un mensaje."
+                "🚫 No puedo leer esa dirección.\n\n"
+                "Por favor enviá tu ubicación usando el *clip* 📎 ➜ *Ubicación* "
+                "y elegí *Enviar tu ubicación actual*."
             )
             return "EVENT_RECEIVED"
+
         
 
         # ==========================

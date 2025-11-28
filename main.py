@@ -514,7 +514,7 @@ async def received_message(request: Request):
             return "EVENT_RECEIVED"
         
 
-                # ==========================
+        # ==========================
         # FASE: esperando calificación del repartidor
         # ==========================
         estado = estado_usuarios.get(number)
@@ -782,7 +782,7 @@ def pedidos_entregados():
     return data
 
 
-@app.post("/entregarpedido/{codigo}")
+@app.get("/entregarpedido/{codigo}")
 async def entregar_pedido(codigo: str):
     """
     Marca un pedido como entregado a partir de su código de validación

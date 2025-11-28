@@ -241,6 +241,87 @@ def a_star_gif(orig, dest):
 # ============================================================
 
 def reconstruct_path_gif(orig, dest, algorithm_name=""):
+    """
+    Reconstruye el camino usando los punteros 'previous' dejados por a_star_gif
+    y calcula la distancia total en km. También agrega frames para el GIF.
+    """
+    global frames
+
+    # 1) Chequeo básico: ¿hay camino?
+    if G.nodes[dest].get("previous") is None and dest != orig:
+        print("No se encontro un camino valido")
+        return False
+
+    # 2) Resetear estilos de aristas
+    for edge in G.edges:
+        style_unvisited_edge(edge)
+
+    dist_m = 0.0
+    speeds = []
+    curr = dest
+    path_edges = []
+
+    # 3) Reconstruir camino dest -> orig
+    while curr != orig:
+        prev = G.nodes[curr].get("previous")
+        if prev is None:
+            # Camino roto, no deberia pasar si se chequeo arriba
+            break
+
+        # Guardamos la arista como (u, v, key) para MultiDiGraph
+        edge_data = G.get_edge_data(prev, curr)
+        if edge_data:
+            e0 = list(edge_data.values())[0]
+            length = e0.get("length", 0.0)
+            maxspeed = e0.get("maxspeed", 30.0)
+        else:
+            length = 0.0
+            maxspeed = 30.0
+
+        dist_m += length
+        speeds.append(maxspeed)
+
+        # Estilizamos esta arista como parte del camino óptimo
+        path_edges.append((prev, curr, 0))
+        style_visited_edge((prev, curr, 0))
+
+        curr = prev
+
+    # Cerramos el camino agregando el origen
+    path_edges.reverse()
+    dist_km = dist_m / 1000.0
+
+    if speeds:
+        vel_prom = sum(speeds) / len(speeds)
+        tiempo_min = dist_km / vel_prom * 60.0
+    else:
+        vel_prom = 0.0
+        tiempo_min = 0.0
+
+    # 4) Frame final con título resumen
+    if vel_prom > 0:
+        final_title = (
+            f"{algorithm_name} - CAMINO OPTIMO\n"
+            f"Distancia: {dist_km:.2f}km | "
+            f"Velocidad: {vel_prom:.1f}km/h | "
+            f"Tiempo: {tiempo_min:.1f}min"
+        )
+    else:
+        final_title = (
+            f"{algorithm_name} - CAMINO OPTIMO\n"
+            f"Distancia: {dist_km:.2f}km"
+        )
+
+    plot_graph_to_image(final_title, save_frame=True, frame_num=len(path_edges))
+
+    print(f"Distancia: {dist_km:.2f} km")
+    if vel_prom > 0:
+        print(f"Velocidad promedio: {vel_prom:.1f} km/h")
+        print(f"Tiempo total: {tiempo_min:.1f} minutos")
+    print(f"Camino completado: {len(frames)} frames totales")
+
+    return True
+
     global frames
 
     # 1) Chequeo de que haya camino

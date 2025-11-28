@@ -541,8 +541,8 @@ async def received_message(request: Request):
             if not pedido or not pedido.items:
                 await send_text(
                     number,
-                    "🧺 Tu carrito está vacío, todavía no puedo finalizar el pedido.\n"
-                    "Elegí algún producto del menú primero."
+                    "Por ahora no tenés un pedido pendiente. ✅\n"
+                    "Escribí cualquier cosa para ver el menú y hacer uno nuevo."
                 )
                 return "EVENT_RECEIVED"
 

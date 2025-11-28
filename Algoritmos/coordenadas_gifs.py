@@ -23,6 +23,7 @@ frames = []
 # Cargar el grafo de Salto, Uruguay
 place_name = "Salto, Uruguay"
 G = ox.graph_from_place(place_name, network_type="drive")
+G = ox.project_graph(G)  # 👈 añade esto
 
 # Procesar atributos del grafo (velocidades, pesos, etc.)
 for edge in G.edges:
@@ -241,41 +242,84 @@ def a_star_gif(orig, dest):
 
 def reconstruct_path_gif(orig, dest, algorithm_name=""):
     global frames
-    if G.nodes[dest]["previous"] is None and dest != orig:
+
+    # 1) Chequeo de que haya camino
+    if G.nodes[dest].get("previous") is None and dest != orig:
         print("No se encontro un camino valido")
         return False
 
+    # 2) Resetear estilos
     for edge in G.edges:
         style_unvisited_edge(edge)
 
-    dist = 0
+    dist = 0.0
     speeds = []
     curr = dest
     path_edges = []
 
+    # 3) Reconstruir el camino nodos → aristas
     while curr != orig:
-        prev = G.nodes[curr]["previous"]
+        prev = G.nodes[curr].get("previous")
         if prev is None:
             print("Error: Camino incompleto")
             return False
-        path_edges.append((prev, curr, 0))
-        dist += G.edges[(prev, curr, 0)]["length"]
-        speeds.append(G.edges[(prev, curr, 0)]["maxspeed"])
+
+        edge_key = (prev, curr, 0)
+        if edge_key not in G.edges:
+            print(f"Arista {edge_key} no encontrada en el grafo")
+            return False
+
+        path_edges.append(edge_key)
+
+        data = G.edges[edge_key]
+        dist += data.get("length", 0.0)
+
+        maxspeed = data.get("maxspeed")
+        if isinstance(maxspeed, (int, float)):
+            speeds.append(maxspeed)
+
         curr = prev
 
+    # 4) Pintar el camino paso a paso
     for i, edge in enumerate(reversed(path_edges)):
         style_path_edge(edge)
-        plot_graph_to_image(f"{algorithm_name} - Construyendo camino... {i+1}/{len(path_edges)}",
-                            save_frame=True, frame_num=i)
+        plot_graph_to_image(
+            f"{algorithm_name} - Construyendo camino... {i+1}/{len(path_edges)}",
+            save_frame=True,
+            frame_num=i,
+        )
 
-    dist /= 1000
-    final_title = f"{algorithm_name} - CAMINO OPTIMO\n"
-    final_title += f"Distancia: {dist:.2f}km | Velocidad: {sum(speeds)/len(speeds):.1f}km/h | Tiempo: {dist/(sum(speeds)/len(speeds)) * 60:.1f}min"
+    # 5) Calcular métricas (sin dividir por cero)
+    dist_km = dist / 1000.0 if dist > 0 else 0.0
+
+    if speeds:
+        vel_prom = sum(speeds) / len(speeds)
+        tiempo_min = dist_km / vel_prom * 60.0 if vel_prom > 0 else 0.0
+    else:
+        # Caso borde: no hay velocidades registradas
+        vel_prom = 0.0
+        tiempo_min = 0.0
+
+    # 6) Título del último frame
+    if vel_prom > 0:
+        final_title = (
+            f"{algorithm_name} - CAMINO OPTIMO\n"
+            f"Distancia: {dist_km:.2f}km | "
+            f"Velocidad: {vel_prom:.1f}km/h | "
+            f"Tiempo: {tiempo_min:.1f}min"
+        )
+    else:
+        final_title = (
+            f"{algorithm_name} - CAMINO OPTIMO\n"
+            f"Distancia: {dist_km:.2f}km"
+        )
+
     plot_graph_to_image(final_title, save_frame=True, frame_num=len(path_edges))
 
-    print(f"Distancia: {dist:.2f} km")
-    print(f"Velocidad promedio: {sum(speeds)/len(speeds):.1f} km/h")
-    print(f"Tiempo total: {dist/(sum(speeds)/len(speeds)) * 60:.1f} minutos")
+    print(f"Distancia: {dist_km:.2f} km")
+    if vel_prom > 0:
+        print(f"Velocidad promedio: {vel_prom:.1f} km/h")
+        print(f"Tiempo total: {tiempo_min:.1f} minutos")
     print(f"Camino completado: {len(frames)} frames totales")
 
     return True

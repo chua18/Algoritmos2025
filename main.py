@@ -231,6 +231,15 @@ async def enviar_lote_actual_al_repartidor() -> None:
     # 4) Marcar lote como enviado y preparar el siguiente
     gestor_reparto.marcar_lote_enviado()
 
+async def intentar_cerrar_lote(telefono: str) -> None:
+    """
+    Asigna el pedido de este teléfono al gestor de reparto.
+    Si con este pedido se llena el lote (7 pedidos), genera el GIF
+    y lo envía al repartidor.
+    """
+    lote_lleno = gestor_reparto.asignar_pedido(telefono)
+    if lote_lleno:
+        await enviar_lote_actual_al_repartidor()
 
 # --------------------------------------------------------
 # ENDPOINTS
@@ -406,12 +415,7 @@ async def received_message(request: Request):
                     "Tu pedido está en preparación. 🙌" + extra
                 )
 
-                # 👉 NUEVO: asignamos este pedido al lote de reparto
-                lote_lleno = gestor_reparto.asignar_pedido(number)
-                if lote_lleno:
-                    # Si al agregar este pedido se llenó el lote (7),
-                    # generamos GIF y se lo mandamos al repartidor
-                    await enviar_lote_actual_al_repartidor()
+                await intentar_cerrar_lote(number)
 
                 return "EVENT_RECEIVED"
 
@@ -427,10 +431,7 @@ async def received_message(request: Request):
                     "Tu pedido está en preparación. 🙌"
                 )
 
-                # 👉 NUEVO: también entra al lote aunque no haya ubicación GPS
-                lote_lleno = gestor_reparto.asignar_pedido(number)
-                if lote_lleno:
-                    await enviar_lote_actual_al_repartidor()
+                await intentar_cerrar_lote(number)
 
                 return "EVENT_RECEIVED"
 

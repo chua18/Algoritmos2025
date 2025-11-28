@@ -22,6 +22,7 @@ from Algoritmos.coordenadas_gifs import (
 
 # Cargar el grafo de Salto, Uruguay
 G = ox.graph_from_place("Salto, Uruguay", network_type="drive")
+G = ox.project_graph(G)  # 👈 añade esto
 
 # Configurar atributos de las aristas: maxspeed y weight (tiempo aproximado)
 for edge in G.edges:

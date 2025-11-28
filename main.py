@@ -6,6 +6,7 @@ import httpx
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import PlainTextResponse
 
+import random
 from Dominio.Chat import Chat
 from Dominio.Reparto import GestorReparto
 from Dominio import Rutas
@@ -24,7 +25,18 @@ chat = Chat()
 
 clientes: Dict[str, Cliente] = {}
 
+codigos_pedidos: Dict[str, Pedido] = {}
+
 estado_usuarios: Dict[str, Dict[str, Any]] = {}
+
+CELULAR_REPARTIDOR = {
+    "NO": os.getenv("REPARTIDOR_NO", "59891307359"),
+    "NE": os.getenv("REPARTIDOR_NE", "59896964635"),
+    "SO": os.getenv("REPARTIDOR_SO", "59891466197"),
+    "SE": os.getenv("REPARTIDOR_SE", "59892239294"),
+}
+
+gestor_reparto = GestorReparto.desde_config(CELULAR_REPARTIDOR)
 
 # --- CREDENCIALES Y CONFIGURACIÓN ---
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")
@@ -38,14 +50,7 @@ logging.info(f"ACCESS_TOKEN cargado? {bool(ACCESS_TOKEN)}")
 logging.info(f"PHONE_NUMBER_ID: {PHONE_NUMBER_ID!r}")
 logging.info(f"GRAPH_SEND_URL: {GRAPH_SEND_URL}")
 
-CELULAR_REPARTIDOR = {
-    "NO": os.getenv("REPARTIDOR_NO", "59891307359"),
-    "NE": os.getenv("REPARTIDOR_NE", "59896964635"),
-    "SO": os.getenv("REPARTIDOR_SO", "59891466197"),
-    "SE": os.getenv("REPARTIDOR_SE", "59892239294"),
-}
 
-gestor_reparto = GestorReparto.desde_config(CELULAR_REPARTIDOR)
 
 def cliente_to_dict(cliente: Cliente) -> Dict[str, Any]:
     """
@@ -454,19 +459,31 @@ async def received_message(request: Request):
         # FASE: esperando ubicación luego de confirmar pedido
         # ==========================
         if estado and estado.get("fase") == "esperando_ubicacion":
-            # Solo aceptamos ubicación nativa de WhatsApp
             if message.get("type") == "location":
                 loc = message["location"]
                 lat = loc.get("latitude")
                 lng = loc.get("longitude")
 
-                # Guardamos ubicación y calculamos distancia/tiempo/zona dentro de Chat
-                chat.guardar_ubicacion(number, lat, lng, loc.get("address") or loc.get("name") or "")
+                # Guardar ubicación y calcular ruta
+                chat.guardar_ubicacion(
+                    number,
+                    lat,
+                    lng,
+                    loc.get("address") or loc.get("name") or ""
+                )
                 estado_usuarios.pop(number, None)
 
                 pedido = chat.pedidos.get(number)
                 extra = ""
+                codigo = None
+
                 if pedido:
+                    # Generar código de validación si aún no tiene
+                    if not getattr(pedido, "codigo_validacion", None):
+                        codigo = f"{random.randint(0, 999999):06d}"
+                        pedido.codigo_validacion = codigo
+                        codigos_pedidos[codigo] = pedido
+
                     if getattr(pedido, "distancia_km", 0) > 0:
                         extra += (
                             f"\n\n🛣 Distancia estimada: {pedido.distancia_km:.2f} km"
@@ -475,16 +492,19 @@ async def received_message(request: Request):
                     if getattr(pedido, "zona", None):
                         extra += f"\n📍 Zona de reparto: {pedido.zona}"
 
-                await send_text(
-                    number,
-                    "📍 ¡Gracias! Ya registramos tu ubicación.\n"
-                    "Tu pedido está en preparación. 🙌" + extra
-                )
+                mensaje = "📍 ¡Gracias! Ya registramos tu ubicación.\nTu pedido está en preparación. 🙌" + extra
 
+                if codigo:
+                    mensaje += (
+                        f"\n\n🔑 Tu código de validación para la entrega es: *{codigo}*.\n"
+                        "Mostraselo al repartidor cuando llegue."
+                    )
+
+                await send_text(number, mensaje)
                 await intentar_cerrar_lote(number)
                 return "EVENT_RECEIVED"
 
-            # Si manda texto, audio, imagen, etc. → pedimos ubicación nativa
+            # Si manda cualquier otra cosa
             await send_text(
                 number,
                 "🚫 No puedo leer esa dirección.\n\n"
@@ -492,6 +512,53 @@ async def received_message(request: Request):
                 "y elegí *Enviar tu ubicación actual*."
             )
             return "EVENT_RECEIVED"
+        
+
+                # ==========================
+        # FASE: esperando calificación del repartidor
+        # ==========================
+        estado = estado_usuarios.get(number)
+        if estado and estado.get("fase") == "esperando_calificacion" and type_message == "text":
+            try:
+                valor = int(texto_normalizado)
+            except ValueError:
+                await send_text(
+                    number,
+                    "❌ No entendí la calificación.\n"
+                    "Por favor enviá un número del *1 al 5*."
+                )
+                return "EVENT_RECEIVED"
+
+            if valor < 1 or valor > 5:
+                await send_text(
+                    number,
+                    "⚠️ La calificación debe ser un número del *1 al 5*.\n"
+                    "Intentá de nuevo."
+                )
+                return "EVENT_RECEIVED"
+
+            pedido = chat.pedidos.get(number)
+            # OJO: el pedido ya fue sacado de chat.pedidos al cerrar lote,
+            # así que lo buscamos en los clientes o repartidores
+            if not pedido:
+                # Intentamos buscarlo en el cliente
+                cliente = clientes.get(number)
+                if cliente and cliente.pedidos:
+                    # Tomamos el último pedido como el que se está calificando
+                    pedido = cliente.pedidos[-1]
+
+            if pedido:
+                pedido.calificacion = valor
+
+            estado_usuarios.pop(number, None)
+
+            await send_text(
+                number,
+                f"✨ ¡Gracias por tu valoración de *{valor}/5*! Nos ayuda a mejorar el servicio. 🙌"
+            )
+            return "EVENT_RECEIVED"
+
+
 
         
 
@@ -714,6 +781,50 @@ def pedidos_entregados():
 
     return data
 
+
+@app.post("/entregarpedido/{codigo}")
+async def entregar_pedido(codigo: str):
+    """
+    Marca un pedido como entregado a partir de su código de validación
+    y le pide al cliente que califique al repartidor (1-5).
+    """
+    pedido = codigos_pedidos.get(codigo)
+    if not pedido:
+        raise HTTPException(status_code=404, detail="Código inválido o pedido no encontrado.")
+
+    # Ya entregado antes
+    if pedido.entregado:
+        return {"status": "already_delivered", "mensaje": "El pedido ya estaba marcado como entregado."}
+
+    pedido.entregado = True
+
+    # Buscar repartidor por zona y registrar entrega
+    zona = getattr(pedido, "zona", None) or "SO"
+    repartidor = gestor_reparto.repartidores.get(zona)
+    if repartidor:
+        repartidor.registrar_entrega(pedido)
+        # Opcional: sacarlo de pendientes (lote o cola)
+        if pedido in repartidor.lote_actual.pedidos:
+            repartidor.lote_actual.pedidos.remove(pedido)
+        elif pedido in repartidor.cola_espera:
+            repartidor.cola_espera.remove(pedido)
+
+    # El código ya no se puede volver a usar
+    codigos_pedidos.pop(codigo, None)
+
+    # Pedir calificación al cliente
+    texto = (
+        "✅ Marcamos tu pedido como *entregado*.\n\n"
+        "Por favor valorá la atención del repartidor con una nota del *1 al 5* "
+        "(siendo 5 la mejor calificación).\n\n"
+        "Escribí solo el número, por ejemplo: *5*."
+    )
+    await send_text(pedido.telefono_cliente, texto)
+
+    # Marcamos estado del usuario para esperar su calificación
+    estado_usuarios[pedido.telefono_cliente] = {"fase": "esperando_calificacion"}
+
+    return {"status": "ok", "telefono_cliente": pedido.telefono_cliente, "zona": zona}
 
 
 # --------------------------------------------------------

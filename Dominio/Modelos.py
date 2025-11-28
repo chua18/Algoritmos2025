@@ -10,7 +10,7 @@ class Cliente:
     telefono: str
     nombre: str
     pedidos: List["Pedido"] = field(default_factory=list)
-    
+
 @dataclass
 class UnidadCarrito:
     #representa la unidad del producto en el carrito guardando su detalle
@@ -52,6 +52,10 @@ class Pedido:
     distancia_km: float = 0.0
     tiempo_estimado_min: float = 0.0
     path_nodos: List[int] = field(default_factory=list)
+
+    codigo_validacion: Optional[str] = None
+    entregado: bool = False
+    calificacion: Optional[int] = None
 
     @property
     def total(self) -> int:

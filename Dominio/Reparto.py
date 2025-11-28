@@ -51,7 +51,13 @@ class RepartidorZona:
         return False
 
     def obtener_lote_actual(self) -> List[Pedido]:
-        return list(self.lote_actual.pedidos)
+        """
+        Devuelve los pedidos del lote actual ORDENADOS
+        por distancia desde el local (distancia_km ascendente).
+        """
+        pedidos = list(self.lote_actual.pedidos)
+        pedidos.sort(key=lambda p: getattr(p, "distancia_km", 0.0))
+        return pedidos
 
     def obtener_pedidos_pendientes(self) -> List[Pedido]:
         """

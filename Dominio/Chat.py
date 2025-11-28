@@ -424,7 +424,6 @@ class Chat:
                     lineas.append(f"   - x{cant} completas")
 
         lineas.append(f"\n💵 *Total:* ${pedido.total}")
-        lineas.append("\nEscribí *confirmar* para finalizar o *borrar* para vaciar el carrito.")
         return "\n".join(lineas)
     
     def generar_menu_quitar_producto(self, telefono: str) -> Optional[Dict[str, Any]]:

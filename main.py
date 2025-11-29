@@ -30,10 +30,8 @@ codigos_pedidos: Dict[str, Pedido] = {}
 estado_usuarios: Dict[str, Dict[str, Any]] = {}
 
 CELULAR_REPARTIDOR = {
-    "NO": os.getenv("REPARTIDOR_NO", "59891307359"),
-    "NE": os.getenv("REPARTIDOR_NE", "59896964635"),
-    "SO": os.getenv("REPARTIDOR_SO", "59896964635"),
-    "SE": os.getenv("REPARTIDOR_SE", "59891307359"),
+    "D1": os.getenv("REPARTIDOR_D1", "59891307359"),
+    "D2": os.getenv("REPARTIDOR_D2", "59896964635"),
 }
 
 gestor_reparto = GestorReparto.desde_config(CELULAR_REPARTIDOR)

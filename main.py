@@ -214,38 +214,38 @@ async def upload_media(file_path: str, mime_type: str = "image/gif") -> str:
         return media_id
 
 
-async def enviar_lote_zona_al_repartidor(zona: str) -> None:
-    
-   # Toma el lote_actual del repartidor de la zona indicada,
-   # genera la imagen (PNG) con la ruta de todos los pedidos,
-   # y la envía al repartidor con un resumen de cada pedido.
-   # Luego marca el lote como enviado (y carga el siguiente si hay cola).
-    
-    repartidor = gestor_reparto.repartidores.get(zona)
+async def enviar_lote_repartidor(repartidor_id: str) -> None:
+    """
+    Toma el lote_actual del repartidor indicado,
+    genera la imagen (PNG) con la ruta de todos los pedidos,
+    y la envía al repartidor con un resumen de cada pedido.
+    Luego marca el lote como enviado (y carga el siguiente si hay cola).
+    """
+    repartidor = gestor_reparto.repartidores.get(repartidor_id)
     if not repartidor:
-        logging.warning(f"[REPARTO] No hay repartidor configurado para zona={zona}")
+        logging.warning(f"[REPARTO] No hay repartidor configurado con id={repartidor_id}")
         return
 
-    pedidos_lote: List[Pedido] = gestor_reparto.obtener_lote_actual(zona)
+    pedidos_lote: List[Pedido] = gestor_reparto.obtener_lote_actual(repartidor_id)
     if not pedidos_lote:
-        logging.info(f"[REPARTO] No hay pedidos en el lote actual de zona={zona}.")
+        logging.info(f"[REPARTO] No hay pedidos en el lote actual del repartidor {repartidor_id}.")
         return
 
     # 1) Generar imagen (PNG) para el lote
     png_path = Rutas.generar_gif_ruta_lote(pedidos_lote)
     if not png_path:
-        logging.warning(f"[REPARTO] No se pudo generar la imagen del lote (PNG) para zona={zona}.")
+        logging.warning(f"[REPARTO] No se pudo generar la imagen del lote (PNG) para repartidor={repartidor_id}.")
         return
 
     # 2) Subir la imagen PNG
     media_id = await upload_media(png_path, "image/png")
     if not media_id:
-        logging.warning(f"[REPARTO] No se pudo subir la imagen PNG a WhatsApp para zona={zona}.")
+        logging.warning(f"[REPARTO] No se pudo subir la imagen PNG a WhatsApp para repartidor={repartidor_id}.")
         return
 
     # 3) Armar resumen para el repartidor
     lineas: List[str] = []
-    lineas.append(f"🛵 *Nuevo lote de pedidos (hasta 7) - Zona {zona}*")
+    lineas.append(f"🛵 *Nuevo lote de pedidos (hasta 7) - Repartidor {repartidor_id}*")
 
     for idx, p in enumerate(pedidos_lote, start=1):
         if p.direccion_texto:
@@ -259,7 +259,7 @@ async def enviar_lote_zona_al_repartidor(zona: str) -> None:
         lineas.append(f"\n#{idx} 📱 {p.telefono_cliente}")
         lineas.append(f"📍 {direccion}")
         if getattr(p, "zona", None):
-            lineas.append(f"🗺 Zona: {p.zona}")
+            lineas.append(f"🗺 Zona del cliente: {p.zona}")
         lineas.append(f"💵 Total: ${p.total}")
 
     caption = "\n".join(lineas)
@@ -277,11 +277,10 @@ async def enviar_lote_zona_al_repartidor(zona: str) -> None:
     }
 
     await send_to_whatsapp(payload)
-    logging.info(f"[REPARTO] Imagen de ruta del lote enviada al repartidor de zona={zona}.")
+    logging.info(f"[REPARTO] Imagen de ruta del lote enviada al repartidor {repartidor_id}.")
 
     # 4) Marcar lote como enviado y preparar el siguiente
-    gestor_reparto.marcar_lote_enviado(zona)
-
+    gestor_reparto.marcar_lote_enviado(repartidor_id)
 
 async def intentar_cerrar_lote(telefono: str) -> None:
     pedido = chat.pedidos.get(telefono)
@@ -294,13 +293,14 @@ async def intentar_cerrar_lote(telefono: str) -> None:
     if cliente and pedido not in cliente.pedidos:
         cliente.pedidos.append(pedido)
 
-    lote_lleno, zona = gestor_reparto.asignar_pedido(pedido)
+    # Asignar al repartidor con lote más vacío
+    lote_lleno, repartidor_id = gestor_reparto.asignar_pedido(pedido)
 
     # sacamos el pedido activo del chat
     chat.pedidos.pop(telefono, None)
 
     if lote_lleno:
-        await enviar_lote_zona_al_repartidor(zona)
+        await enviar_lote_repartidor(repartidor_id)
 
 # --------------------------------------------------------
 # ENDPOINTS
@@ -341,7 +341,6 @@ async def received_message(request: Request):
         changes = entry["changes"][0]
         value = changes["value"]
 
-        # A veces llegan solo "statuses", sin mensajes nuevos
         if "messages" not in value or len(value["messages"]) == 0:
             return "EVENT_RECEIVED"
 
@@ -511,10 +510,9 @@ async def received_message(request: Request):
             )
             return "EVENT_RECEIVED"
         
-
-        # ==========================
+      
         # FASE: esperando calificación del repartidor
-        # ==========================
+        
         estado = estado_usuarios.get(number)
         if estado and estado.get("fase") == "esperando_calificacion" and type_message == "text":
             try:
@@ -696,7 +694,7 @@ async def received_message(request: Request):
                 )
                 return "EVENT_RECEIVED"
 
-            # Mostramos el nuevo resumen del carrito
+            # Mostramos el resumen del carrito
             resumen = chat.resumen_carrito(number)
             await send_text(
                 number,
@@ -802,9 +800,10 @@ def pedidos_entregados():
 
 @app.get("/entregarpedido/{codigo}")
 async def entregar_pedido(codigo: str):
-    
-   # Marca un pedido como entregado a partir de su código de validación y le pide al cliente que califique al repartidor (1-5).
-   
+    """
+    Marca un pedido como entregado a partir de su código de validación
+    y le pide al cliente que califique al repartidor (1-5).
+    """
     pedido = codigos_pedidos.get(codigo)
     if not pedido:
         raise HTTPException(status_code=404, detail="Código inválido o pedido no encontrado.")
@@ -815,9 +814,10 @@ async def entregar_pedido(codigo: str):
 
     pedido.entregado = True
 
-    # Buscar repartidor por zona y registrar entrega
-    zona = getattr(pedido, "zona", None) or "SO"
-    repartidor = gestor_reparto.repartidores.get(zona)
+    # Buscar repartidor REAL que tenía este pedido
+    repartidor_id = getattr(pedido, "repartidor_id", None)
+    repartidor = gestor_reparto.repartidores.get(repartidor_id) if repartidor_id else None
+
     if repartidor:
         repartidor.registrar_entrega(pedido)
         # Opcional: sacarlo de pendientes (lote o cola)
@@ -841,8 +841,11 @@ async def entregar_pedido(codigo: str):
     # Marcamos estado del usuario para esperar su calificación
     estado_usuarios[pedido.telefono_cliente] = {"fase": "esperando_calificacion"}
 
-    return {"status": "ok", "telefono_cliente": pedido.telefono_cliente, "zona": zona}
-
+    return {
+        "status": "ok",
+        "telefono_cliente": pedido.telefono_cliente,
+        "repartidor_id": repartidor_id,
+    }
 
 # --------------------------------------------------------
 # MAIN LOCAL

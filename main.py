@@ -817,10 +817,9 @@ def pedidos_entregados():
 
 @app.get("/entregarpedido/{codigo}")
 async def entregar_pedido(codigo: str):
-    """
-    Marca un pedido como entregado a partir de su código de validación
-    y le pide al cliente que califique al repartidor (1-5).
-    """
+    
+   # Marca un pedido como entregado a partir de su código de validación y le pide al cliente que califique al repartidor (1-5).
+   
     pedido = codigos_pedidos.get(codigo)
     if not pedido:
         raise HTTPException(status_code=404, detail="Código inválido o pedido no encontrado.")

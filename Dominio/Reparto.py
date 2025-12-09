@@ -9,9 +9,9 @@ ZONAS_VALIDAS = ("NO", "NE", "SO", "SE")
 
 @dataclass
 class LoteReparto:
-    """
-    Representa un lote de pedidos para un repartidor.
-    """
+   
+    # Representa un lote de pedidos para un repartidor.
+   
     pedidos: List[Pedido] = field(default_factory=list)
 
     def esta_completo(self) -> bool:
@@ -66,21 +66,21 @@ class RepartidorZona:
         return False
 
     def obtener_lote_actual(self) -> List[Pedido]:
-        """
-        Devuelve los pedidos del lote actual ORDENADOS
-        por distancia desde el local (distancia_km ascendente).
-        """
+       
+       # Devuelve los pedidos del lote actual ORDENADOS
+       # por distancia desde el local (distancia_km ascendente).
+        
         pedidos = list(self.lote_actual.pedidos)
         pedidos.sort(key=lambda p: getattr(p, "distancia_km", 0.0))
         return pedidos
         return list(self.lote_actual.pedidos)
 
     def obtener_pedidos_pendientes(self) -> List[Pedido]:
-        """
-        Devuelve todos los pedidos que aún no se marcaron como entregados:
-        - los del lote actual
-        - los de la cola de espera
-        """
+      
+       # Devuelve todos los pedidos que aún no se marcaron como entregados:
+       # - los del lote actual
+       # - los de la cola de espera
+       
         return list(self.lote_actual.pedidos) + list(self.cola_espera)
 
     def registrar_entrega(self, pedido: Pedido) -> None:
@@ -98,11 +98,11 @@ class RepartidorZona:
         self.pedidos_entregados.append(pedido)
 
     def marcar_lote_enviado(self) -> List[Pedido]:
-        """
-        Se llama luego de enviar la imagen al repartidor.
-        Vacía el lote actual y lo rellena con la siguiente tanda (si hay).
-        Devuelve la lista de pedidos que formaban el lote enviado.
-        """
+        
+       # Se llama luego de enviar la imagen al repartidor.
+       # Vacía el lote actual y lo rellena con la siguiente tanda (si hay).
+       # Devuelve la lista de pedidos que formaban el lote enviado.
+        
         enviados = list(self.lote_actual.pedidos)
         self.lote_actual.vaciar()
 

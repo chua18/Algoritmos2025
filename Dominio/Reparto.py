@@ -28,14 +28,11 @@ class LoteReparto:
 class RepartidorZona:
     
     """
-<<<<<<< HEAD
-    Repartidor asignado a una zona (NO, NE, SO, SE).
-    Maneja su lote actual y una cola de espera.
-=======
+
     Repartidor identificado por una etiqueta (NO, NE, SO, SE).
     Ahora puede entregar pedidos de cualquier zona geográfica del cliente.
     La 'zona' acá funciona como ID lógico del repartidor, no como filtro exclusivo.
->>>>>>> parent of b5d9ce1 (fix)
+
     """
    
     zona: str

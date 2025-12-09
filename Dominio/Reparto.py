@@ -9,9 +9,9 @@ ZONAS_VALIDAS = ("NO", "NE", "SO", "SE")
 
 @dataclass
 class LoteReparto:
-    """
-    Representa un lote de pedidos para un repartidor.
-    """
+   
+    # Representa un lote de pedidos para un repartidor.
+   
     pedidos: List[Pedido] = field(default_factory=list)
 
     def esta_completo(self) -> bool:
@@ -26,23 +26,24 @@ class LoteReparto:
 
 @dataclass
 class RepartidorZona:
+    
     """
     Repartidor identificado por una etiqueta (NO, NE, SO, SE).
-    AHORA puede entregar pedidos de cualquier zona geográfica del cliente.
-    La 'zona' acá funciona como ID lógico del repartidor.
+    Ahora puede entregar pedidos de cualquier zona geográfica del cliente.
+    La 'zona' acá funciona como ID lógico del repartidor, no como filtro exclusivo.
     """
+   
     zona: str
     telefono_whatsapp: str
     lote_actual: LoteReparto = field(default_factory=LoteReparto)
     cola_espera: List[Pedido] = field(default_factory=list)
-    pedidos_entregados: List[Pedido] = field(default_factory=list)
+    pedidos_entregados: List[Pedido] = field(default_factory=list)  
 
     def asignar_pedido(self, pedido: Pedido) -> bool:
-        """
-        Asigna el pedido al lote actual si hay lugar.
-        Si el lote está completo, lo manda a la cola de espera.
-        Devuelve True si DESPUÉS de asignar el pedido, el lote quedó completo.
-        """
+        
+       # Asigna el pedido al lote actual si hay lugar. Si el lote está completo, lo manda a la cola de espera.
+       # Devuelve True si DESPUÉS de asignar el pedido el lote quedó completo.
+       
         if not self.lote_actual.esta_completo():
             self.lote_actual.agregar_pedido(pedido)
             return self.lote_actual.esta_completo()
@@ -52,34 +53,35 @@ class RepartidorZona:
         return False
 
     def obtener_lote_actual(self) -> List[Pedido]:
-        """
-        Devuelve los pedidos del lote actual ORDENADOS
-        por distancia desde el local (distancia_km ascendente).
-        """
+       
+       # Devuelve los pedidos del lote actual ORDENADOS
+       # por distancia desde el local (distancia_km ascendente).
+        
         pedidos = list(self.lote_actual.pedidos)
         pedidos.sort(key=lambda p: getattr(p, "distancia_km", 0.0))
         return pedidos
 
     def obtener_pedidos_pendientes(self) -> List[Pedido]:
-        """
-        Devuelve todos los pedidos que aún no se marcaron como entregados:
-        - los del lote actual
-        - los de la cola de espera
-        """
+      
+       # Devuelve todos los pedidos que aún no se marcaron como entregados:
+       # - los del lote actual
+       # - los de la cola de espera
+       
         return list(self.lote_actual.pedidos) + list(self.cola_espera)
 
     def registrar_entrega(self, pedido: Pedido) -> None:
-        """
-        Registra un pedido como entregado.
-        """
+        
+       # Registra un pedido como entregado (se llama cuando en el futuro
+       # implementes el flujo de entrega con código).
+        
         self.pedidos_entregados.append(pedido)
 
     def marcar_lote_enviado(self) -> List[Pedido]:
-        """
-        Se llama luego de enviar la imagen al repartidor.
-        Vacía el lote actual y lo rellena con la siguiente tanda (si hay).
-        Devuelve la lista de pedidos que formaban el lote enviado.
-        """
+        
+       # Se llama luego de enviar la imagen al repartidor.
+       # Vacía el lote actual y lo rellena con la siguiente tanda (si hay).
+       # Devuelve la lista de pedidos que formaban el lote enviado.
+        
         enviados = list(self.lote_actual.pedidos)
         self.lote_actual.vaciar()
 
@@ -90,22 +92,23 @@ class RepartidorZona:
 
         return enviados
 
-
 @dataclass
 class GestorReparto:
+    
     """
     Maneja la asignación de pedidos a varios repartidores.
     Cada repartidor puede recibir pedidos de cualquier zona;
     los nuevos pedidos se asignan al repartidor con el lote más vacío.
     """
+    
     repartidores: Dict[str, RepartidorZona] = field(default_factory=dict)
 
     @classmethod
     def desde_config(cls, mapa_telefonos: Dict[str, str]) -> "GestorReparto":
-        """
-        Crea un GestorReparto a partir de un dict {id_repartidor: telefono_wpp}.
-        Por compatibilidad se usan labels NO, NE, SO, SE como IDs.
-        """
+        
+       # Crea un GestorReparto a partir de un dict {zona: telefono_wpp}.
+       # Zonas válidas: NO, NE, SO, SE.
+        
         reps: Dict[str, RepartidorZona] = {}
         for zona, tel in mapa_telefonos.items():
             if zona not in ZONAS_VALIDAS:
@@ -114,12 +117,13 @@ class GestorReparto:
         return cls(repartidores=reps)
 
     def asignar_pedido(self, pedido: Pedido) -> tuple[bool, str]:
-        """
-        Asigna el pedido al repartidor que tenga MENOS pedidos
-        en su lote_actual, sin importar la zona del cliente.
+        
+        #Asigna el pedido al repartidor que tenga MÁS ESPACIO en su tanda
+        #de hasta 7 pedidos, sin importar la zona del pedido.
 
-        Devuelve (lote_lleno, repartidor_id).
-        """
+        #Devuelve (lote_lleno, id_repartidor) donde id_repartidor puede ser
+        #la 'zona' o un nombre interno del repartidor (según cómo lo uses en los logs).
+        
         if not self.repartidores:
             raise RuntimeError("No hay repartidores configurados en el GestorReparto.")
 
@@ -129,19 +133,19 @@ class GestorReparto:
             key=lambda r: len(r.lote_actual.pedidos)
         )
 
-        # Guardamos en el pedido a qué repartidor fue asignado
-        pedido.repartidor_id = mejor_repartidor.zona
-
         lote_lleno = mejor_repartidor.asignar_pedido(pedido)
 
+        # Usamos mejor_repartidor.zona como identificador, aunque ahora
+        # no signifique “zona geográfica” sino “ID lógico del repartidor”
         return lote_lleno, mejor_repartidor.zona
 
-    def obtener_lote_actual(self, repartidor_id: str) -> List[Pedido]:
-        if repartidor_id not in self.repartidores:
-            return []
-        return self.repartidores[repartidor_id].obtener_lote_actual()
 
-    def marcar_lote_enviado(self, repartidor_id: str) -> List[Pedido]:
-        if repartidor_id not in self.repartidores:
+    def obtener_lote_actual(self, zona: str) -> List[Pedido]:
+        if zona not in self.repartidores:
             return []
-        return self.repartidores[repartidor_id].marcar_lote_enviado()
+        return self.repartidores[zona].obtener_lote_actual()
+
+    def marcar_lote_enviado(self, zona: str) -> List[Pedido]:
+        if zona not in self.repartidores:
+            return []
+        return self.repartidores[zona].marcar_lote_enviado()

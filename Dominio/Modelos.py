@@ -55,8 +55,6 @@ class Pedido:
     entregado: bool = False
     calificacion: Optional[int] = None
 
-    repartidor_id: str | None = None
-
     @property
     def total(self) -> int:
         return sum(item.precio * item.cantidad for item in self.items)

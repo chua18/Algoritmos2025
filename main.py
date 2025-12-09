@@ -664,7 +664,7 @@ async def received_message(request: Request):
             await send_text(
                 number,
                 resumen + "\n\n📍 Ahora enviame tu ubicación (clip ➜ Ubicación)\n"
-                
+                "o escribí tu dirección exacta."
             )
 
             estado_usuarios[number] = {"fase": "esperando_ubicacion"}

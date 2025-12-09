@@ -60,6 +60,7 @@ class RepartidorZona:
         pedidos = list(self.lote_actual.pedidos)
         pedidos.sort(key=lambda p: getattr(p, "distancia_km", 0.0))
         return pedidos
+        return list(self.lote_actual.pedidos)
 
     def obtener_pedidos_pendientes(self) -> List[Pedido]:
       

@@ -280,25 +280,73 @@ async def enviar_lote_repartidor(repartidor_id: str) -> None:
     # 4) Marcar lote como enviado y preparar el siguiente
     gestor_reparto.marcar_lote_enviado(repartidor_id)
 
-async def intentar_cerrar_lote(telefono: str) -> None:
-    pedido = chat.pedidos.get(telefono)
-    if not pedido:
-        logging.warning(f"[LOTE] No hay pedido activo para tel={telefono}")
+async def enviar_lote_repartidor(repartidor_id: str) -> None:
+    """
+    Toma el lote_actual del repartidor indicado,
+    genera la imagen (PNG) con la ruta de todos los pedidos,
+    y la envía al repartidor con un resumen de cada pedido.
+    Luego marca el lote como enviado (y carga el siguiente si hay cola).
+    """
+    repartidor = gestor_reparto.repartidores.get(repartidor_id)
+    if not repartidor:
+        logging.warning(f"[REPARTO] No hay repartidor configurado con id={repartidor_id}")
         return
 
-    # Vinculamos el pedido al cliente (si existe)
-    cliente = clientes.get(telefono)
-    if cliente and pedido not in cliente.pedidos:
-        cliente.pedidos.append(pedido)
+    pedidos_lote: List[Pedido] = gestor_reparto.obtener_lote_actual(repartidor_id)
+    if not pedidos_lote:
+        logging.info(f"[REPARTO] No hay pedidos en el lote actual del repartidor {repartidor_id}.")
+        return
 
-    # Asignar al repartidor con lote más vacío
-    lote_lleno, repartidor_id = gestor_reparto.asignar_pedido(pedido)
+    # 1) Generar imagen (PNG) para el lote
+    png_path = Rutas.generar_gif_ruta_lote(pedidos_lote)
+    if not png_path:
+        logging.warning(f"[REPARTO] No se pudo generar la imagen del lote (PNG) para repartidor={repartidor_id}.")
+        return
 
-    # sacamos el pedido activo del chat
-    chat.pedidos.pop(telefono, None)
+    # 2) Subir la imagen PNG
+    media_id = await upload_media(png_path, "image/png")
+    if not media_id:
+        logging.warning(f"[REPARTO] No se pudo subir la imagen PNG a WhatsApp para repartidor={repartidor_id}.")
+        return
 
-    if lote_lleno:
-        await enviar_lote_repartidor(repartidor_id)
+    # 3) Armar resumen para el repartidor
+    lineas: List[str] = []
+    lineas.append(f"🛵 *Nuevo lote de pedidos (hasta 7) - Repartidor {repartidor_id}*")
+
+    for idx, p in enumerate(pedidos_lote, start=1):
+        if p.direccion_texto:
+            direccion = p.direccion_texto
+        elif p.ubicacion:
+            lat, lng = p.ubicacion
+            direccion = f"{lat:.5f}, {lng:.5f}"
+        else:
+            direccion = "Sin dirección"
+
+        lineas.append(f"\n#{idx} 📱 {p.telefono_cliente}")
+        lineas.append(f"📍 {direccion}")
+        if getattr(p, "zona", None):
+            lineas.append(f"🗺 Zona del cliente: {p.zona}")
+        lineas.append(f"💵 Total: ${p.total}")
+
+    caption = "\n".join(lineas)
+    if len(caption) > 1024:
+        caption = caption[:1020] + "..."
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": repartidor.telefono_whatsapp,
+        "type": "image",
+        "image": {
+            "id": media_id,
+            "caption": caption,
+        },
+    }
+
+    await send_to_whatsapp(payload)
+    logging.info(f"[REPARTO] Imagen de ruta del lote enviada al repartidor {repartidor_id}.")
+
+    # 4) Marcar lote como enviado y preparar el siguiente
+    gestor_reparto.marcar_lote_enviado(repartidor_id)
 
 # --------------------------------------------------------
 # ENDPOINTS

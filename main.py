@@ -215,12 +215,21 @@ async def upload_media(file_path: str, mime_type: str = "image/gif") -> str:
 
 
 async def enviar_lote_zona_al_repartidor(zona: str) -> None:
+<<<<<<< HEAD
     """
     Toma el lote_actual del repartidor de la zona indicada,
     genera la imagen (PNG) con la ruta de todos los pedidos,
     y la envía al repartidor con un resumen de cada pedido.
     Luego marca el lote como enviado (y carga el siguiente si hay cola).
     """
+=======
+    
+   # Toma el lote_actual del repartidor de la zona indicada,
+   # genera la imagen (PNG) con la ruta de todos los pedidos,
+   # y la envía al repartidor con un resumen de cada pedido.
+   # Luego marca el lote como enviado (y carga el siguiente si hay cola).
+    
+>>>>>>> parent of b5d9ce1 (fix)
     repartidor = gestor_reparto.repartidores.get(zona)
     if not repartidor:
         logging.warning(f"[REPARTO] No hay repartidor configurado para zona={zona}")

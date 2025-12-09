@@ -4,10 +4,13 @@ from Menu import menuCompleto  # usamos tu menuCompleto con 'nombre', 'precio', 
 
 PAGE_SIZE = 5
 
+# ------------------ LÓGICA DE MENÚ (REUTILIZABLE) ------------------ #
+
 def get_paginated_menu(page: int = 1, categoria: Optional[str] = None) -> List[Dict[str, Any]]:
-    
-    # Devuelve una página de productos desde menuCompleto. Si pasás categoría, filtra por ese campo.
-    
+    """
+    Devuelve una página de productos desde menuCompleto.
+    Si pasás categoría, filtra por ese campo.
+    """
     productos = menuCompleto
 
     if categoria is not None:

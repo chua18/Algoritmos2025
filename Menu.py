@@ -1,3 +1,4 @@
+# Menu.py
 from typing import List, Dict, TypedDict
 
 
@@ -9,6 +10,7 @@ class Producto(TypedDict):
     descripcion: str
 
 
+# Lista completa de productos (se mantiene el nombre para no romper imports)
 menuCompleto: List[Producto] = [
     {"id": "1",  "nombre": "Doble cheese",       "precio": 320, "categoria": "Hamburguesas", "descripcion": "Doble carne, cheddar, cebolla"},
     {"id": "30",  "nombre": "simpe cheese",       "precio": 270, "categoria": "Hamburguesas", "descripcion": "Carne simple, cheddar, cebolla"},
@@ -58,4 +60,5 @@ for producto in menuCompleto:
     productos_por_categoria[categoria].append(producto)
 
 
+# (Opcional) Lista de categorías para mostrar en un menú de texto o interactivo
 categorias_disponibles: List[str] = list(productos_por_categoria.keys())

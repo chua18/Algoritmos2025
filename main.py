@@ -51,9 +51,9 @@ logging.info(f"GRAPH_SEND_URL: {GRAPH_SEND_URL}")
 
 
 def cliente_to_dict(cliente: Cliente) -> Dict[str, Any]:
-    
-   # Convierte un Cliente en un diccionario simple para JSON.
-   
+    """
+    Convierte un Cliente en un diccionario simple para JSON.
+    """
     return {
         "telefono": cliente.telefono,
         "nombre": cliente.nombre,
@@ -70,9 +70,10 @@ def cliente_to_dict(cliente: Cliente) -> Dict[str, Any]:
 
 
 def pedido_to_dict(pedido: Pedido) -> Dict[str, Any]:
-   
-   # Convierte un Pedido en un diccionario serializable a JSON con los campos más importantes para debug/monitoreo.
-   
+    """
+    Convierte un Pedido en un diccionario serializable a JSON
+    con los campos más importantes para debug/monitoreo.
+    """
     lat = None
     lng = None
     if pedido.ubicacion:
@@ -93,9 +94,9 @@ def pedido_to_dict(pedido: Pedido) -> Dict[str, Any]:
 # FUNCIONES AUXILIARES PARA ENVIAR MENSAJES A WHATSAPP
 # --------------------------------------------------------
 async def send_to_whatsapp(payload: Dict[str, Any]) -> None:
-    
-   # Envía un payload crudo a la API de WhatsApp.
-   
+    """
+    Envía un payload crudo a la API de WhatsApp.
+    """
     if not ACCESS_TOKEN or not PHONE_NUMBER_ID:
         logging.warning(
             f"Falta ACCESS_TOKEN o PHONE_NUMBER_ID. "
@@ -116,9 +117,9 @@ async def send_to_whatsapp(payload: Dict[str, Any]) -> None:
 
 
 async def send_menu(to: str, nombre: str = "Cliente") -> None:
-   
-   # Envía el menú actual (paginado) al usuario usando tu Chat.
-   
+    """
+    Envía el menú actual (paginado) al usuario usando tu Chat.
+    """
     
     msg = chat.generar_mensaje_menu()
     payload = {
@@ -141,9 +142,10 @@ async def send_text(to: str, body: str) -> None:
     await send_to_whatsapp(payload)
 
 async def send_botones_siguiente_paso(to: str) -> None:
-    
-   # Envía botones para que el usuario elija si quiere seguir comprando, quitar productos o finalizar el pedido.
-    
+    """
+    Envía botones para que el usuario elija si quiere seguir comprando,
+    quitar productos o finalizar el pedido.
+    """
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
@@ -184,9 +186,9 @@ async def send_botones_siguiente_paso(to: str) -> None:
 
     
 async def upload_media(file_path: str, mime_type: str = "image/gif") -> str:
-    
-   # Sube un archivo a la API de WhatsApp y devuelve el media_id.
-  
+    """
+    Sube un archivo a la API de WhatsApp y devuelve el media_id.
+    """
     if not ACCESS_TOKEN or not PHONE_NUMBER_ID:
         logging.warning("No hay ACCESS_TOKEN o PHONE_NUMBER_ID para subir media.")
         return ""
@@ -213,12 +215,12 @@ async def upload_media(file_path: str, mime_type: str = "image/gif") -> str:
 
 
 async def enviar_lote_zona_al_repartidor(zona: str) -> None:
-    
-   # Toma el lote_actual del repartidor de la zona indicada,
-   # genera la imagen (PNG) con la ruta de todos los pedidos,
-   # y la envía al repartidor con un resumen de cada pedido.
-   # Luego marca el lote como enviado (y carga el siguiente si hay cola).
-    
+    """
+    Toma el lote_actual del repartidor de la zona indicada,
+    genera la imagen (PNG) con la ruta de todos los pedidos,
+    y la envía al repartidor con un resumen de cada pedido.
+    Luego marca el lote como enviado (y carga el siguiente si hay cola).
+    """
     repartidor = gestor_reparto.repartidores.get(zona)
     if not repartidor:
         logging.warning(f"[REPARTO] No hay repartidor configurado para zona={zona}")
@@ -363,9 +365,9 @@ async def received_message(request: Request):
         if isinstance(content, str):
             texto_normalizado = content.strip().lower()
 
-      
+        # ==========================
         # 0) MANEJO DE FASES (CANTIDAD / DETALLES)
-       
+        # ==========================
         estado = estado_usuarios.get(number)
 
         # FASE: esperar cantidad
@@ -451,9 +453,9 @@ async def received_message(request: Request):
             await send_botones_siguiente_paso(number)
             return "EVENT_RECEIVED"
         
-       
+        # ==========================
         # FASE: esperando ubicación luego de confirmar pedido
-      
+        # ==========================
         if estado and estado.get("fase") == "esperando_ubicacion":
             if message.get("type") == "location":
                 loc = message["location"]
@@ -534,7 +536,7 @@ async def received_message(request: Request):
                 return "EVENT_RECEIVED"
 
             pedido = chat.pedidos.get(number)
-            # el pedido ya fue sacado de chat.pedidos al cerrar lote,
+            # OJO: el pedido ya fue sacado de chat.pedidos al cerrar lote,
             # así que lo buscamos en los clientes o repartidores
             if not pedido:
                 # Intentamos buscarlo en el cliente
@@ -555,8 +557,12 @@ async def received_message(request: Request):
             return "EVENT_RECEIVED"
 
 
+
+        
+
+        # ==========================
         # 1) SELECCIÓN DE PRODUCTO (LISTA)
-       
+        # ==========================
         es_producto = isinstance(content, str) and content.startswith("producto_")
         if es_producto:
             # Iniciamos flujo: primero cantidad
@@ -575,9 +581,9 @@ async def received_message(request: Request):
             )
             return "EVENT_RECEIVED"
 
-        
+        # ==========================
         # 2) ACCIONES DEL MENÚ (next_page, ordenar, filtrar_categoria, etc.)
-      
+        # ==========================
         es_accion_menu = (
             isinstance(content, str)
             and (
@@ -597,10 +603,11 @@ async def received_message(request: Request):
             await send_to_whatsapp(payload)
             return "EVENT_RECEIVED"
 
-       
+         # ==========================
         # 3) COMANDOS DE TEXTO Y BOTONES
-        #    (carrito, borrar, reset, confirmar, seguir_comprando, finalizar_pedido)
-       
+        #    (carrito, borrar, reset, confirmar,
+        #     seguir_comprando, finalizar_pedido)
+        # ==========================
 
         # Botón " Seguir comprando"
         if texto_normalizado == "seguir_comprando":
@@ -670,9 +677,9 @@ async def received_message(request: Request):
             estado_usuarios[number] = {"fase": "esperando_ubicacion"}
             return "EVENT_RECEIVED"
         
-        
-        # SELECCIÓN de unidad a quitar del carrito
-       
+        # ==========================
+        # 3.b) SELECCIÓN de unidad a quitar del carrito
+        # ==========================
         if isinstance(content, str) and content.startswith("quitar_unidad_"):
             resto = content[len("quitar_unidad_"):]  # algo como "0_2"
             try:
@@ -720,9 +727,10 @@ async def received_message(request: Request):
 
 @app.get("/clientesnuevos")
 def clientes_nuevos():
-   
-   # Devuelve todos los clientes registrados por el bot desde que la aplicación se inició.
-    
+    """
+    Devuelve todos los clientes registrados por el bot
+    desde que la aplicación se inició.
+    """
     lista_clientes = [cliente_to_dict(c) for c in clientes.values()]
 
     return {
@@ -733,11 +741,11 @@ def clientes_nuevos():
 
 @app.get("/pedidosporrepartidor")
 def pedidos_por_repartidor():
-    
-    #Devuelve, para cada repartidor, los pedidos pendientes:
-    #- pedidos en el lote actual
-    #- pedidos en la cola de espera
- 
+    """
+    Devuelve, para cada repartidor, los pedidos pendientes:
+    - pedidos en el lote actual
+    - pedidos en la cola de espera
+    """
     data: Dict[str, Any] = {}
 
     for zona, repartidor in gestor_reparto.repartidores.items():
@@ -753,13 +761,13 @@ def pedidos_por_repartidor():
 
 @app.get("/pedidosentregados")
 def pedidos_entregados():
-  
-   # Devuelve, para cada repartidor:
-   # - pedidos entregados
-   # - promedio de estrellas recibidas
-   # - distancia total recorrida (suma de distancias de los pedidos)
-   # - gasto estimado de nafta (1 litro cada 10 km)
-  
+    """
+    Devuelve, para cada repartidor:
+    - pedidos entregados
+    - promedio de estrellas recibidas
+    - distancia total recorrida (suma de distancias de los pedidos)
+    - gasto estimado de nafta (1 litro cada 10 km)
+    """
     data: Dict[str, Any] = {}
 
     for zona, repartidor in gestor_reparto.repartidores.items():
@@ -800,9 +808,10 @@ def pedidos_entregados():
 
 @app.get("/entregarpedido/{codigo}")
 async def entregar_pedido(codigo: str):
-    
-   # Marca un pedido como entregado a partir de su código de validación y le pide al cliente que califique al repartidor (1-5).
-   
+    """
+    Marca un pedido como entregado a partir de su código de validación
+    y le pide al cliente que califique al repartidor (1-5).
+    """
     pedido = codigos_pedidos.get(codigo)
     if not pedido:
         raise HTTPException(status_code=404, detail="Código inválido o pedido no encontrado.")
